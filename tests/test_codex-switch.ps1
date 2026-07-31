@@ -44,7 +44,7 @@ show-context-window-usage = true
 } finally { Remove-Item $tmpCfg -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== Test 3: Resolve-ActiveMarkers ===" -ForegroundColor Cyan
-$tmpDir = Join-Path $env:TEMP ("cm-test-" + [guid]::NewGuid().ToString('N'))
+$tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmpDir | Out-Null
 try {
     $dsPath = Join-Path $tmpDir 'deepseek.toml'
@@ -62,7 +62,7 @@ try {
 } finally { Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== Test 4: 同 model 多模板按 token 指纹精筛 ===" -ForegroundColor Cyan
-$tmpDir2 = Join-Path $env:TEMP ("cm-test-" + [guid]::NewGuid().ToString('N'))
+$tmpDir2 = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmpDir2 | Out-Null
 try {
     $t1 = Join-Path $tmpDir2 'a.toml'
@@ -78,8 +78,8 @@ try {
 } finally { Remove-Item $tmpDir2 -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== Test 5: Save-ModelState + Get-SwitchContent 状态优先 ===" -ForegroundColor Cyan
-$tmpState = Join-Path $env:TEMP ("cm-test-" + [guid]::NewGuid().ToString('N'))
-$tmpModels = Join-Path $env:TEMP ("cm-test-" + [guid]::NewGuid().ToString('N'))
+$tmpState = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
+$tmpModels = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmpState, $tmpModels | Out-Null
 try {
     [System.IO.File]::WriteAllText((Join-Path $tmpModels 'deepseek.toml'), '模板内容', [System.Text.UTF8Encoding]::new($false))
@@ -101,7 +101,7 @@ try {
 } finally { Remove-Item $tmpState, $tmpModels -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== Test 6: Resolve-ActiveName ===" -ForegroundColor Cyan
-$tmpDir6 = Join-Path $env:TEMP ("cm-test-" + [guid]::NewGuid().ToString('N'))
+$tmpDir6 = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmpDir6 | Out-Null
 try {
     $dsPath = Join-Path $tmpDir6 'deepseek.toml'
