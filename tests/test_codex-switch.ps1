@@ -21,12 +21,12 @@ try {
 model = "deepseek-v4-flash"
 model_provider = "deepseek"
 [model_providers.deepseek]
-experimental_bearer_token = "sk-abcdefghijklmnopqrstuvwxyz123456"
+experimental_bearer_token = "test-token-abcdefghijklmnopqrstuvwxyz123456"
 '@, [System.Text.UTF8Encoding]::new($false))
     $fp = Get-TemplateFingerprint -Path $tmpTpl
     Assert-True ($fp.Model -eq 'deepseek-v4-flash') '解析 model'
     Assert-True ($fp.Provider -eq 'deepseek') '解析 model_provider'
-    Assert-True ($fp.TokenFingerprint -eq 'sk-abc|123456') 'token 指纹 = 前6|后6'
+    Assert-True ($fp.TokenFingerprint -eq 'test-t|123456') 'token 指纹 = 前6|后6'
 } finally { Remove-Item $tmpTpl -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== Test 2: Get-CurrentFingerprint ===" -ForegroundColor Cyan
@@ -66,11 +66,11 @@ $tmpDir2 = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::New
 New-Item -ItemType Directory -Path $tmpDir2 | Out-Null
 try {
     $t1 = Join-Path $tmpDir2 'a.toml'
-    [System.IO.File]::WriteAllText($t1, 'model = "x"' + "`n" + 'model_provider = "p"' + "`n" + 'experimental_bearer_token = "sk-AAAAAAAAAAAA11111111111111"', [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($t1, 'model = "x"' + "`n" + 'model_provider = "p"' + "`n" + 'experimental_bearer_token = "test-token-AAAAAAAAAAAA11111111111111"', [System.Text.UTF8Encoding]::new($false))
     $t2 = Join-Path $tmpDir2 'b.toml'
-    [System.IO.File]::WriteAllText($t2, 'model = "x"' + "`n" + 'model_provider = "p"' + "`n" + 'experimental_bearer_token = "sk-BBBBBBBBBB22222222222222"', [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($t2, 'model = "x"' + "`n" + 'model_provider = "p"' + "`n" + 'experimental_bearer_token = "test-token-BBBBBBBBBB22222222222222"', [System.Text.UTF8Encoding]::new($false))
     $cfg2 = Join-Path $tmpDir2 'config.toml'
-    [System.IO.File]::WriteAllText($cfg2, 'model = "x"' + "`n" + 'model_provider = "p"' + "`n" + 'experimental_bearer_token = "sk-BBBBBBBBBB22222222222222"', [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($cfg2, 'model = "x"' + "`n" + 'model_provider = "p"' + "`n" + 'experimental_bearer_token = "test-token-BBBBBBBBBB22222222222222"', [System.Text.UTF8Encoding]::new($false))
 
     $markers = Resolve-ActiveMarkers -Files @($t1, $t2) -ConfigPath $cfg2
     Assert-True ($markers[$t1] -eq 'backup') 'token 不匹配 → backup'

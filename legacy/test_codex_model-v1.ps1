@@ -42,7 +42,7 @@ model_reasoning_effort = "max"
 [model_providers.deepseek]
 name = "deepseek"
 base_url = "https://api.deepseek.com/"
-experimental_bearer_token = "sk-abcdefghijklmnopqrstuvwxyz123456"
+experimental_bearer_token = "test-token-abcdefghijklmnopqrstuvwxyz123456"
 '@, [System.Text.UTF8Encoding]::new($false))
     $fp = Get-TemplateFingerprint -Path $tmpTpl
     Assert-True ($fp.Model -eq 'deepseek-v4-flash') '解析 model'
@@ -100,12 +100,12 @@ Remove-Item $tmpDir2 -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $tmpDir2 | Out-Null
 try {
     $t1 = Join-Path $tmpDir2 'a.toml'
-    [System.IO.File]::WriteAllText($t1, 'model = "x"' + "`n" + 'model_provider = "p"' + "`n" + 'experimental_bearer_token = "sk-AAAAAAAAAAAA11111111111111"', [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($t1, 'model = "x"' + "`n" + 'model_provider = "p"' + "`n" + 'experimental_bearer_token = "test-token-AAAAAAAAAAAA11111111111111"', [System.Text.UTF8Encoding]::new($false))
     $t2 = Join-Path $tmpDir2 'b.toml'
-    [System.IO.File]::WriteAllText($t2, 'model = "x"' + "`n" + 'model_provider = "p"' + "`n" + 'experimental_bearer_token = "sk-BBBBBBBBBB22222222222222"', [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($t2, 'model = "x"' + "`n" + 'model_provider = "p"' + "`n" + 'experimental_bearer_token = "test-token-BBBBBBBBBB22222222222222"', [System.Text.UTF8Encoding]::new($false))
 
     $cfg2 = Join-Path $tmpDir2 'config.toml'
-    [System.IO.File]::WriteAllText($cfg2, 'model = "x"' + "`n" + 'model_provider = "p"' + "`n" + 'experimental_bearer_token = "sk-BBBBBBBBBB22222222222222"', [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($cfg2, 'model = "x"' + "`n" + 'model_provider = "p"' + "`n" + 'experimental_bearer_token = "test-token-BBBBBBBBBB22222222222222"', [System.Text.UTF8Encoding]::new($false))
 
     $markers = Resolve-ActiveMarkers -Files @($t1, $t2) -ConfigPath $cfg2
     Assert-True ($markers[$t1] -eq 'backup') 'token 不匹配 → backup'
