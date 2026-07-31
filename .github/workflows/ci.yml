@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-windows:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests (pwsh, Windows 分支)
+        shell: pwsh
+        run: ./tests/test_codex-switch.ps1
+
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bash syntax check (Linux 分支)
+        run: |
+          bash -n linux/codex-switch
+          bash -n linux/install.sh
+          bash -n linux/uninstall.sh
+      - name: Linux 分支冒烟测试（隔离 HOME）
+        run: |
+          export HOME="$RUNNER_TEMP/codex-home"
+          mkdir -p "$HOME/.codex/models" "$HOME/.codex/model-states"
+          cat > "$HOME/.codex/models/deepseek.toml" <<'EOF'
+          model = "deepseek-v4-flash"
+          model_provider = "deepseek"
+          [model_providers.deepseek]
+          name = "deepseek"
+          EOF
+          cat > "$HOME/.codex/config.toml" <<'EOF'
+          model = "deepseek-v4-flash"
+          model_provider = "deepseek"
+          [model_providers.deepseek]
+          name = "deepseek"
+          EOF
+          bash linux/codex-switch list | grep -q deepseek
+          bash linux/codex-switch current | grep -q deepseek-v4-flash
+          bash linux/codex-switch doctor | grep -q "通过 7 / 7"
+          echo "Linux 冒烟测试通过"

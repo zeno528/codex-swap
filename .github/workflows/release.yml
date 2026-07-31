@@ -1,0 +1,35 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests (pwsh, Windows 分支)
+        shell: pwsh
+        run: ./tests/test_codex-switch.ps1
+
+      - name: Bash syntax check (Linux 分支)
+        run: |
+          bash -n linux/codex-switch
+          bash -n linux/install.sh
+          bash -n linux/uninstall.sh
+
+      - name: Build release zips
+        shell: pwsh
+        run: |
+          Compress-Archive -Path src, bin -DestinationPath codex-switch-windows.zip -Force
+          Compress-Archive -Path linux/codex-switch -DestinationPath codex-switch-linux.zip -Force
+
+      - name: Create GitHub Release
+        run: gh release create "$GITHUB_REF_NAME" codex-switch-windows.zip codex-switch-linux.zip --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

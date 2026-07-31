@@ -1,0 +1,6 @@
+# 临时/备份
+*.old
+*.tmp
+
+# 本地产物
+codex-switch-windows.zip
