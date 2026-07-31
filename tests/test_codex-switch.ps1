@@ -4,7 +4,7 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
 
-$modulePath = Join-Path $PSScriptRoot '..\src\codex-switch.psm1'
+$modulePath = Join-Path $PSScriptRoot '../src/codex-switch.psm1'
 Import-Module $modulePath -Force
 
 $pass = 0
