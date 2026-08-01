@@ -15,9 +15,17 @@
 
 ## ⚡ 安装
 
-| 🪟 Windows · PowerShell 7 | 🐧 Linux / WSL2 |
-|:--------------------------|:----------------|
-| `irm https://raw.githubusercontent.com/zeno528/codex-switch/main/windows/install.ps1 \| iex` | `bash <(curl -fsSL https://raw.githubusercontent.com/zeno528/codex-switch/main/linux/install.sh)` |
+### 🪟 Windows · PowerShell 7
+
+```powershell
+irm https://raw.githubusercontent.com/zeno528/codex-switch/main/windows/install.ps1 | iex
+```
+
+### 🐧 Linux / WSL2
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/zeno528/codex-switch/main/linux/install.sh)
+```
 
 > 卸载：Windows `.\windows\install.ps1 -Uninstall` ｜ Linux `bash install.sh --uninstall`。数据目录 `~/.codex` 全程不受影响。
 
