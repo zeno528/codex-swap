@@ -11,7 +11,7 @@ jobs:
   test-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Run tests (pwsh, Windows 分支)
         shell: pwsh
         run: ./windows/tests/test_codex-switch.ps1
@@ -19,7 +19,7 @@ jobs:
   test-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Bash syntax check and version validation
         run: |
           bash -n linux/codex-switch
@@ -35,7 +35,7 @@ jobs:
     needs: [test-windows, test-linux]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build release zips
         run: |
           mkdir -p dist
