@@ -30,7 +30,7 @@ grep -q 'gpt-5.6-terra' "$CODEX_HOME/config.toml"
 
 printf '%s\n' 'trusted_project = "test-project"' >> "$CODEX_HOME/config.toml"
 output="$(bash linux/codex-switch use deepseek)"
-grep -q '已切换至 deepseek' <<< "$output"
+grep -q '已切换至 🐳 deepseek' <<< "$output"
 grep -q 'trusted_project = "test-project"' "$CODEX_HOME/model-states/gpt.toml"
 cmp "$test_root/deepseek-before.toml" "$CODEX_HOME/config.toml"
 test "$(find "$CODEX_HOME/backups_model" -name '*.toml' | wc -l)" -ge 2
@@ -84,5 +84,31 @@ if output="$(PATH="$fake_bin:$PATH" bash "$test_root/codex-switch" update 2>&1)"
     exit 1
 fi
 grep -q '找不到资产 codex-switch-linux.zip' <<< "$output"
+
+# === 首次使用向导 ===
+wizard_home="$test_root/wizard"
+mkdir -p "$wizard_home"
+
+# 未装 codex：输出安装命令并询问代执行（若 runner 预装 codex 则跳过安装提示断言）
+if ! command -v codex >/dev/null 2>&1; then
+    output="$(CODEX_HOME="$wizard_home" bash linux/codex-switch menu </dev/null 2>&1)"
+    grep -q '未检测到 codex CLI' <<< "$output"
+    grep -q 'curl -fsSL https://chatgpt.com/codex/install.sh' <<< "$output"
+    grep -q '是否现在帮你执行安装命令' <<< "$output"
+fi
+
+# 内置 🐳 DeepSeek 模板：假 codex + 管道输入走完整向导
+cat > "$fake_bin/codex" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = "--version" ] && printf '0.144.0\n'
+EOF
+chmod +x "$fake_bin/codex"
+output="$(printf '2\n2\nsk-wizard-test-key\nN\nq\n' | CODEX_HOME="$wizard_home" PATH="$fake_bin:$PATH" bash linux/codex-switch menu 2>&1)"
+grep -q '模板已创建' <<< "$output"
+grep -q 'deepseek-v4-pro' "$wizard_home/models/deepseek-pro.toml"
+grep -q 'sk-wizard-test-key' "$wizard_home/models/deepseek-pro.toml"
+grep -q 'deepseek-v4-pro' "$wizard_home/config.toml"
+grep -q 'deepseek-v4-flash' "$wizard_home/models.json"
+grep -q 'deepseek-v4-pro' "$wizard_home/models.json"
 
 echo 'Linux 端到端切换测试通过'

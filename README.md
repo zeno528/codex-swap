@@ -42,6 +42,8 @@ codex-switch doctor     # 环境体检
 
 Linux/WSL2 下还可用快捷命令 `cxs`（等同 `codex-switch`）。
 
+**首次使用**：模板目录 `~/.codex/models/` 为空时自动进入初始化向导 —— 检查 codex CLI（未安装时按系统给出安装命令）、选择导入已有模板或使用内置 🐳 DeepSeek 模板（V4-Flash / V4-Pro）、引导填写 API Key，并自动生成模型目录 `~/.codex/models.json`。
+
 ## 📖 工作原理
 
 - **模板** `~/.codex/models/<name>.toml`：首次使用模型的种子配置，可随时编辑

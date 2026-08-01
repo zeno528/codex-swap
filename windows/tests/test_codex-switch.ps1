@@ -171,6 +171,43 @@ try {
     Assert-True ($null -eq $c.Source) '无托管时 Source 为 $null'
 } finally { Remove-Item $tmpAuth2 -Recurse -Force -ErrorAction SilentlyContinue }
 
+Write-Host "`n=== Test 13: 首次向导基础（安装提示/版本检查/🐳 命名） ===" -ForegroundColor Cyan
+# 无 codex 时给出官方安装命令（CI 环境无 codex 可断言非空）
+$hint = Get-CodexInstallHint
+if ($null -ne $hint) {
+    Assert-True (($hint -join ' ') -match 'codex') '安装提示包含官方 codex 命令'
+} else {
+    Assert-True $true '本机已装 codex，跳过安装提示断言'
+}
+$vt = Test-CodexVersion
+Assert-True ($null -eq $vt -or $vt -is [bool]) 'Test-CodexVersion 返回 $null 或 bool'
+Assert-True ((Format-TemplateName 'deepseek') -eq '🐳 deepseek') 'deepseek 显示 🐳'
+Assert-True ((Format-TemplateName 'deepseek-pro') -eq '🐳 deepseek-pro') 'deepseek-pro 显示 🐳'
+Assert-True ((Format-TemplateName 'gpt') -eq 'gpt') '其他模型不加图标'
+
+Write-Host "`n=== Test 14: 内置模板写入（DeepSeek + 官方 models.json） ===" -ForegroundColor Cyan
+$tmpW = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $tmpW | Out-Null
+try {
+    $tplDs = & (Get-Module codex-switch) { $script:TemplateDeepseek }
+    Assert-True (-not [string]::IsNullOrWhiteSpace($tplDs)) '内置 Flash 模板非空'
+    $p = Write-TemplateFile -Name 'deepseek' -Content $tplDs -ApiKey 'sk-test-key-123456789' -ModelsDir $tmpW
+    Assert-True ([System.IO.File]::Exists($p)) '模板文件已生成'
+    $c = [System.IO.File]::ReadAllText($p, [System.Text.UTF8Encoding]::new($false))
+    Assert-True ($c -match 'model = "deepseek-v4-flash"') 'model 字段正确'
+    Assert-True ($c -match 'sk-test-key-123456789') 'API Key 已替换'
+    Assert-True ($c -notmatch '__API_KEY__|__MODELS_JSON__') '占位符已全部清除'
+    Assert-True ($c -match 'models\.json') 'model_catalog_json 已替换为实际路径'
+    Assert-True ($c -match 'wire_api = "responses"') '走 Responses API'
+
+    $jp = Write-ModelsJsonFile -Path (Join-Path $tmpW 'models.json')
+    Assert-True ([System.IO.File]::Exists($jp)) 'models.json 已生成'
+    $jc = [System.IO.File]::ReadAllText($jp, [System.Text.UTF8Encoding]::new($false))
+    Assert-True ($jc -match '"deepseek-v4-flash"' -and $jc -match '"deepseek-v4-pro"') 'models.json 含两个模型'
+    Assert-True ($jc -match 'base_instructions') '含官方系统提示词 base_instructions'
+    Assert-True ($jc -match 'comp_hash') '含官方 comp_hash 元数据'
+} finally { Remove-Item $tmpW -Recurse -Force -ErrorAction SilentlyContinue }
+
 Write-Host "`n=== 总结 ===" -ForegroundColor Cyan
 Write-Host "通过: $pass" -ForegroundColor Green
 Write-Host "失败: $fail" -ForegroundColor $(if ($fail -eq 0) { 'Green' } else { 'Red' })
