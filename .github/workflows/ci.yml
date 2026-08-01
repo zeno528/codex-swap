@@ -25,6 +25,9 @@ jobs:
           bash -n linux/uninstall.sh
           bash -n scripts/verify-release.sh
           bash -n scripts/build.sh
+          bash -n .githooks/pre-commit .githooks/prepare-commit-msg .githooks/lib.sh
+      - name: Git hooks 测试（版本递增 + CHANGELOG 自动写入）
+        run: scripts/test-hooks.sh
       - name: 校验版本源与占位符状态
         run: scripts/verify-release.sh
       - name: 构建双平台发行包

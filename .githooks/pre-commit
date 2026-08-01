@@ -6,19 +6,11 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 VF="$ROOT/VERSION"
+source "$ROOT/.githooks/lib.sh"
 
 [ -f "$VF" ] || { echo "pre-commit: 跳过版本递增（缺 $VF）"; exit 0; }
 
-# 发布物相关路径：改动这些才递增；其余（README/docs/CI/.githooks 等）跳过
-is_release_change() {
-    while IFS= read -r f; do
-        case "$f" in
-            linux/*|windows/src/*|windows/bin/*|windows/install.ps1|windows/uninstall.ps1|scripts/build.sh)
-                return 0 ;;
-        esac
-    done < <(git diff --cached --name-only)
-    return 1
-}
+# 发布物相关路径：改动这些才递增；其余（README/docs/CI/.githooks 等）跳过（见 lib.sh）
 
 if ! is_release_change; then
     echo "pre-commit: 未改动发布物相关文件，跳过版本递增"
@@ -51,9 +43,17 @@ fi
 new="$(bump "$cur")"
 printf '%s\n' "$new" > "$VF"
 git add "$VF"
-# 同步三处源码版本（源码为固化版本号，不再是 @VERSION@ 占位符）
-sed -i "s/^VERSION=\"[^\"]*\"/VERSION=\"$new\"/" "$ROOT/linux/codex-switch"
-sed -i "s/^\(\$script:ScriptVersion[[:space:]]*=[[:space:]]*'\)[^']*'/\1$new'/" "$ROOT/windows/src/codex-switch.psm1"
-sed -i "s/^\([[:space:]]*ModuleVersion[[:space:]]*=[[:space:]]*'\)[^']*'/\1$new'/" "$ROOT/windows/src/codex-switch.psd1"
-git add "$ROOT/linux/codex-switch" "$ROOT/windows/src/codex-switch.psm1" "$ROOT/windows/src/codex-switch.psd1"
+# 同步三处源码版本（源码为固化版本号，不再是 @VERSION@ 占位符；文件缺失时跳过）
+if [ -f "$ROOT/linux/codex-switch" ]; then
+    sed -i "s/^VERSION=\"[^\"]*\"/VERSION=\"$new\"/" "$ROOT/linux/codex-switch"
+    git add "$ROOT/linux/codex-switch"
+fi
+if [ -f "$ROOT/windows/src/codex-switch.psm1" ]; then
+    sed -i "s/^\(\$script:ScriptVersion[[:space:]]*=[[:space:]]*'\)[^']*'/\1$new'/" "$ROOT/windows/src/codex-switch.psm1"
+    git add "$ROOT/windows/src/codex-switch.psm1"
+fi
+if [ -f "$ROOT/windows/src/codex-switch.psd1" ]; then
+    sed -i "s/^\([[:space:]]*ModuleVersion[[:space:]]*=[[:space:]]*'\)[^']*'/\1$new'/" "$ROOT/windows/src/codex-switch.psd1"
+    git add "$ROOT/windows/src/codex-switch.psd1"
+fi
 echo "pre-commit: 版本号 $cur → $new（VERSION 与三处源码已同步）"

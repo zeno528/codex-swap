@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# prepare-commit-msg: 发布物相关提交时自动写 CHANGELOG.md
+# 与 pre-commit 联动：pre-commit 先运行（已递增 VERSION 并同步三处源码），
+# 本 hook 读到的是新版本号，用它生成 changelog 条目（版本号 + 日期 + 提交消息首行）
+# 幂等：同一提交消息已存在于 CHANGELOG 则跳过（防 amend/重试重复写入）
+set -euo pipefail
+
+MSG_FILE="${1:-}"
+[ -n "$MSG_FILE" ] && [ -f "$MSG_FILE" ] || exit 0
+
+ROOT="$(git rev-parse --show-toplevel)"
+source "$ROOT/.githooks/lib.sh"
+
+# 非发布物提交（README/docs/CI/.githooks 等）：不产生新版本，不写 changelog
+is_release_change || exit 0
+
+CL="$ROOT/CHANGELOG.md"
+ver="$(tr -d '[:space:]' < "$ROOT/VERSION")"
+[[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 0
+
+msg="$(grep -m1 -v '^[[:space:]]*$' "$MSG_FILE" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+[ -n "$msg" ] || exit 0
+
+if [ -f "$CL" ] && grep -Fq -- "- $msg" "$CL"; then
+    echo "prepare-commit-msg: 提交消息已在 CHANGELOG，跳过"
+    exit 0
+fi
+
+[ -f "$CL" ] || printf '# Changelog\n' > "$CL"
+
+entry="## [$ver] - $(date +%F)
+
+- $msg"
+tmp="$(mktemp)"
+{ head -n 1 "$CL"; echo ""; printf '%s\n' "$entry"; echo ""; tail -n +2 "$CL"; } > "$tmp"
+mv "$tmp" "$CL"
+git add "$CL"
+echo "prepare-commit-msg: 已写入 CHANGELOG（v$ver）"

@@ -17,8 +17,8 @@
 windows/              Windows 分支（src/、bin/、安装器、卸载器、测试）
 linux/                Linux 分支（codex-switch 主脚本 / install.sh / uninstall.sh）
 docs/                 架构文档
-scripts/              构建与校验脚本（build.sh / verify-release.sh / test-linux.sh）
-.githooks/            pre-commit（自动递增 VERSION）
+scripts/              构建与校验脚本（build.sh / verify-release.sh / test-linux.sh / test-hooks.sh）
+.githooks/            pre-commit（递增 VERSION）+ prepare-commit-msg（写 CHANGELOG）+ lib.sh（共享判定）
 ```
 
 ## 版本管理（唯一版本源 + 构建注入）
@@ -30,7 +30,8 @@ scripts/              构建与校验脚本（build.sh / verify-release.sh / tes
 3. `windows/src/codex-switch.psd1` → `ModuleVersion = '@VERSION@'`
 
 - 改版本：只改 `VERSION` 一个文件；本地验证用 `scripts/build.sh --inject`
-- `pre-commit` hook（`.githooks/pre-commit`，`core.hooksPath` 指向 `.githooks`）：改动发布物相关文件（`linux/*`、`windows/src/*`、`windows/bin/*`、安装器、`scripts/build.sh`）时自动递增 `VERSION` 的 patch（99 进位，0.0.99 → 0.1.0）；纯文档/CI/元数据改动不递增；检测到工作区 `VERSION` ≠ HEAD 时跳过（发版手动升 minor/major 不重复递增）
+- `pre-commit` hook（`.githooks/pre-commit`，`core.hooksPath` 指向 `.githooks`）：改动发布物相关文件（`linux/*`、`windows/src/*`、`windows/bin/*`、安装器、`scripts/build.sh`）时自动递增 `VERSION` 的 patch（99 进位，0.0.99 → 0.1.0）；纯文档/CI/元数据改动不递增；检测到工作区 `VERSION` ≠ HEAD 时跳过（发版手动升 minor/major 不重复递增）；递增后同步三处源码版本（文件缺失时跳过）
+- `prepare-commit-msg` hook（`.githooks/prepare-commit-msg`）：发布物提交时自动写 `CHANGELOG.md` —— 在标题后插入「`## [版本] - 日期` + 提交消息首行」条目（pre-commit 先递增，此处用新版本号）；非发布物提交不写；同消息已存在则跳过（幂等，防 amend/重试重复）；发布物判定与 pre-commit 共享 `.githooks/lib.sh` 的 `is_release_change`
 - 构建/发版：`scripts/build.sh --package` 注入并产出双 zip；`scripts/verify-release.sh [tag] [zip...]` 校验 VERSION 格式、源码占位符状态、包内注入版本
 - 发版流程：递增 VERSION → 跑全量测试 → commit 并推送 main；release workflow 自动读取 VERSION、创建同名 vX.Y.Z tag、构建双 zip 并创建 Release（notes 为自上次 tag 以来的 commit 列表）
 - git tag 由 release workflow 创建；源码永远不提交注入产物
@@ -67,9 +68,14 @@ scripts/              构建与校验脚本（build.sh / verify-release.sh / tes
 - 冒烟：隔离 `CODEX_HOME`（或 HOME）跑 `list/current/use/doctor` 全链路
 - 本地端到端参考 `wsl-smoke` 模式：模板播种 → 切换 → 模拟增长 → 切回 → 验证状态无污染
 
+### Git hooks（scripts/test-hooks.sh）
+
+- 临时 git 仓库模拟三轮提交：发布物提交 → 递增 + 写 CHANGELOG；非发布物提交 → 两者不动；再次发布物提交 → 递增到下一版本 + 新条目
+- 改动 `.githooks/*` 后必须跑 `scripts/test-hooks.sh`
+
 ### CI（push 自动跑）
 
-- `ci.yml`：Windows 跑 pwsh 测试 + Ubuntu 跑 bash 语法/冒烟
+- `ci.yml`：Windows 跑 pwsh 测试 + Ubuntu 跑 bash 语法/冒烟/hooks 测试
 - `release.yml`：main 上 VERSION 变更触发，测试通过后构建 `codex-switch-windows.zip`（windows/src+windows/bin）和 `codex-switch-linux.zip`（linux/codex-switch）双包并创建 Release
 - 修改 `.github/workflows/*.yml` 后必须运行 `actionlint`，并修复其报告的问题
 
