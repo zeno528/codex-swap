@@ -35,8 +35,4 @@ jobs:
           scripts/build.sh --package
           test "$(unzip -p codex-switch-linux.zip codex-switch | sed -n 's/^VERSION="\([^"]*\)".*/\1/p')" = "$(tr -d '[:space:]' < VERSION)"
       - name: Linux 分支端到端切换测试（隔离 CODEX_HOME）
-        run: |
-          set -o pipefail
-          echo "runner codex: $(command -v codex || echo 无)"
-          echo "LANG=$LANG bash=$(bash --version | head -1)"
-          bash -x scripts/test-linux.sh 2>&1 | tail -200
+        run: scripts/test-linux.sh
