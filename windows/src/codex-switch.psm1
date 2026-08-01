@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.34'
+$script:ScriptVersion = '0.2.35'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-switch'
 $script:ReleaseAsset   = 'codex-switch-windows.zip'
@@ -588,7 +588,8 @@ function Invoke-List {
         return $line + $R
     }
     # 数据行: 边框灰, 内容按 $Color 染色
-    function Write-DataRow($Values, $Color) {
+    function Write-DataRow($Values, $Color, $Bold) {
+        if ($Bold) { Write-Host "$([char]27)[1m" -NoNewline }
         Write-Host '│' -NoNewline -ForegroundColor DarkGray
         for ($i = 0; $i -lt $colCount; $i++) {
             $val = [string]$Values[$i]
@@ -607,6 +608,7 @@ function Invoke-List {
                 Write-Host (' ' * $pad + '│') -NoNewline -ForegroundColor DarkGray
             }
         }
+        if ($Bold) { Write-Host "$([char]27)[0m" -NoNewline }
         Write-Host ''
     }
     # 表头: 边框灰, 内容青
@@ -639,7 +641,7 @@ function Invoke-List {
     foreach ($r in $rows) {
         $vals = @(); foreach ($k in $keys) { $vals += $r[$k] }
         $color = if ($r.Status -eq '✅') { 'Green' } elseif ($r.Status -eq '🔑') { 'Yellow' } else { 'White' }
-        Write-DataRow $vals $color
+        Write-DataRow $vals $color ($r.Status -eq '✅')
     }
     Write-Host (_HLine '╰' '┴' '╯') -ForegroundColor DarkGray
     Write-ColorOutput '✅ 激活中 🔑 备用密钥，同 model 不会被自动激活' DarkGray
@@ -1045,7 +1047,8 @@ function Invoke-Menu {
                 }
                 return $line + $R
             }
-            function Write-DataRow($Values, $Color) {
+            function Write-DataRow($Values, $Color, $Bold) {
+                if ($Bold) { Write-Host "$([char]27)[1m" -NoNewline }
                 Write-Host '│' -NoNewline -ForegroundColor DarkGray
                 for ($i = 0; $i -lt $colCount; $i++) {
                     $val = [string]$Values[$i]
@@ -1064,6 +1067,7 @@ function Invoke-Menu {
                         Write-Host (' ' * $pad + '│') -NoNewline -ForegroundColor DarkGray
                     }
                 }
+                if ($Bold) { Write-Host "$([char]27)[0m" -NoNewline }
                 Write-Host ''
             }
             function Write-HeadRow($Values, $Color) {
@@ -1093,7 +1097,7 @@ function Invoke-Menu {
             foreach ($r in $rows) {
                 $vals = @(); foreach ($k in $keys) { $vals += $r[$k] }
                 $color = if ($r.Status -eq '✅') { 'Green' } elseif ($r.Status -eq '🔑') { 'Yellow' } else { 'White' }
-                Write-DataRow $vals $color
+                Write-DataRow $vals $color ($r.Status -eq '✅')
             }
             Write-Host (_HLine '╰' '┴' '╯') -ForegroundColor DarkGray
             Write-ColorOutput '✅ 激活中 🔑 备用密钥，同 model 不会被自动激活' DarkGray

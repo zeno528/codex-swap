@@ -9,7 +9,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.34"
+VERSION="0.2.35"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -27,7 +27,7 @@ MODELS_JSON="$CODEX_HOME/models.json"
 DEEPSEEK_MIN_CODEX="0.144.0"
 UPDATED=false
 
-C='\033[0m' RED='\033[31m' GREEN='\033[32m' YELLOW='\033[33m' CYAN='\033[38;2;63;174;194m' BOLD_CYAN='\033[1;38;2;63;174;194m' DGRAY='\033[90m'
+C='\033[0m' RED='\033[31m' GREEN='\033[32m' BOLD_GREEN='\033[1;32m' YELLOW='\033[33m' CYAN='\033[38;2;63;174;194m' BOLD_CYAN='\033[1;38;2;63;174;194m' DGRAY='\033[90m'
 
 say()  { printf "${GREEN}%s${C}\n" "$1"; }
 warn() { printf "${YELLOW}%s${C}\n" "$1"; }
@@ -249,7 +249,7 @@ read_secret() {
 table_row() {
     local num="$1" status="$2" name="$3" model="$4" provider="$5" color="$6"
     printf '  '
-    table_cell "$num" 4 "$color"
+    table_cell_center "$num" 4 "$color"
     table_cell_center "$status" 6 "$color"
     table_cell "$name" 16 "$color"
     table_cell "$model" 26 "$color"
@@ -286,7 +286,7 @@ cmd_list() {
         color="$C"
         if [ "$model" = "$cur_model" ] && [ "$provider" = "$cur_provider" ]; then
             status='✅'
-            color="$GREEN"
+            color="$BOLD_GREEN"
         fi
         table_row "$i" "$status" "$name" "${model:--}" "$(provider_icon "$provider" "$model")${provider:--}" "$color"
     done
