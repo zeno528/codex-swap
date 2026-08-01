@@ -13,6 +13,7 @@ REPO_NAME="codex-switch"
 ASSET_NAME="codex-switch-linux.zip"
 BIN_DIR="$HOME/.local/bin"
 LAUNCHER="$BIN_DIR/codex-switch"
+SHORTCUT="$BIN_DIR/cxs"
 
 say()  { printf '\033[32m  %s\033[0m\n' "$1"; }
 warn() { printf '\033[33m  %s\033[0m\n' "$1"; }
@@ -22,6 +23,9 @@ fail() { printf '\033[31m  %s\033[0m\n' "$1" >&2; exit 1; }
 if [ "${1:-}" = "--uninstall" ]; then
     echo "卸载 codex-switch..."
     rm -f "$LAUNCHER" && say "已删除启动器 $LAUNCHER" || true
+    if [ -L "$SHORTCUT" ] && [ "$(readlink "$SHORTCUT")" = "codex-switch" ]; then
+        rm -f "$SHORTCUT" && say "已删除快捷命令 $SHORTCUT"
+    fi
     echo "  数据目录 ~/.codex 未动（models/model-states 完好）"
     exit 0
 fi
@@ -67,6 +71,17 @@ cp "$NEW" "$LAUNCHER"
 chmod +x "$LAUNCHER"
 say "启动器 $LAUNCHER"
 
+if [ -e "$SHORTCUT" ] || [ -L "$SHORTCUT" ]; then
+    if [ -L "$SHORTCUT" ] && [ "$(readlink "$SHORTCUT")" = "codex-switch" ]; then
+        say "快捷命令 $SHORTCUT"
+    else
+        warn "快捷命令未创建：$SHORTCUT 已被占用"
+    fi
+else
+    ln -s "codex-switch" "$SHORTCUT"
+    say "快捷命令 $SHORTCUT"
+fi
+
 # ---------- PATH ----------
 case ":$PATH:" in
     *":$BIN_DIR:"*) say "$BIN_DIR 已在 PATH 中" ;;
@@ -80,6 +95,7 @@ esac
 # ---------- 汇总 ----------
 printf '\n\033[32m✅ codex-switch %s 安装完成\033[0m\n' "$TAG"
 echo "   程序: $LAUNCHER"
+echo "   快捷: cxs"
 echo "   数据目录: $HOME/.codex（未改动）"
 echo "   使用: 新终端里运行 codex-switch"
 echo "   升级: codex-switch update"

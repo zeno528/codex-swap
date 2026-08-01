@@ -245,7 +245,7 @@ cmd_doctor() {
 
 show_help() {
     echo "用法: codex-switch [use <name>] | [list] | [current] | [update] | [doctor] | [help]"
-    echo "      菜单内: o 打开模板目录"
+    echo "      菜单内: o 打开模板目录，u 检查并升级"
 }
 
 # === 交互式菜单 ===
@@ -253,7 +253,7 @@ cmd_menu() {
     while true; do
         clear
         printf "${CYAN}  ╭── codex-switch v%s 模型切换 ──╮${C}\n" "$VERSION"
-        echo "     选数字切模型，q 退出，o 打开模板目录"
+        echo "     选数字切模型，u 升级，q 退出，o 打开模板目录"
         echo ""
         cmd_list
         read -r -p "  选择: " choice || break
@@ -261,6 +261,7 @@ cmd_menu() {
             q|Q) return ;;
             "") continue ;;
             o|O) xdg-open "$MODELS_DIR" >/dev/null 2>&1 || echo "  手动打开: $MODELS_DIR"; continue ;;
+            u|U) cmd_update; read -r -p "    按回车返回菜单" _ || break; continue ;;
         esac
         if [[ "$choice" =~ ^[0-9]+$ ]]; then
             local files=("$MODELS_DIR"/*.toml) name

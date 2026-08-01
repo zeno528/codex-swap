@@ -38,12 +38,13 @@ bash install.sh v0.2.0        # 指定版本
 bash install.sh --uninstall   # 卸载（不动数据）
 ```
 
-安装内容：`~/.local/bin/codex-switch`（单一可执行脚本），`~/.local/bin` 不在 PATH 会自动追加到 `~/.bashrc`。依赖仅 curl/unzip，**不需要 pwsh**。
+安装内容：`~/.local/bin/codex-switch`（单一可执行脚本）及 `~/.local/bin/cxs` 快捷命令，`~/.local/bin` 不在 PATH 会自动追加到 `~/.bashrc`。依赖仅 curl/unzip，**不需要 pwsh**。
 
 ## 使用（两分支命令一致）
 
 ```powershell
 codex-switch                    # 交互式菜单（选数字切模型，o 打开模板目录）
+cxs                             # 快捷启动（等同 codex-switch）
 codex-switch use deepseek       # 切换模型（恢复该模型最新状态 / 首次模板播种）
 codex-switch list               # 列出模板及激活状态
 codex-switch current            # 查看当前生效配置
