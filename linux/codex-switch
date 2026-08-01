@@ -9,7 +9,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.18"
+VERSION="0.2.19"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -19,6 +19,7 @@ VERSION_URL="https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/VERSI
 
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 CONFIG="$CODEX_HOME/config.toml"
+AUTH_FILE="$CODEX_HOME/auth.json"
 MODELS_DIR="$CODEX_HOME/models"
 STATE_DIR="$CODEX_HOME/model-states"
 BACKUP_DIR="$CODEX_HOME/backups_model"
@@ -107,7 +108,32 @@ resolve_active() {
     echo ""
 }
 
-# === 子命令 ===
+# === 核心：auth.json 托管 — 模板或已有状态任一存在即视为托管 ===
+has_auth_managed() {
+    local name="$1"
+    [ -f "$MODELS_DIR/$name.auth.json" ] || [ -f "$STATE_DIR/$name.auth.json" ]
+}
+
+# === 核心：切出时保存/清空模型 auth 状态（快照反映最新状态） ===
+save_model_auth() {
+    local name="$1"
+    has_auth_managed "$name" || return 0
+    mkdir -p "$STATE_DIR"
+    if [ -f "$AUTH_FILE" ]; then
+        cp "$AUTH_FILE" "$STATE_DIR/$name.auth.json"
+        printf "${DGRAY}  🔑 已保存 auth 状态：%s${C}\n" "$name"
+    else
+        rm -f "$STATE_DIR/$name.auth.json"
+    fi
+}
+
+# === 核心：切入时取目标 auth 源（状态优先，无状态用模板），无托管输出空 ===
+get_switch_auth() {
+    local name="$1"
+    [ -f "$STATE_DIR/$name.auth.json" ] && { echo "$STATE_DIR/$name.auth.json"; return; }
+    [ -f "$MODELS_DIR/$name.auth.json" ] && { echo "$MODELS_DIR/$name.auth.json"; return; }
+    echo ""
+}
 
 cmd_current() {
     [ -f "$CONFIG" ] || fail "config 不存在: $CONFIG"
@@ -244,6 +270,7 @@ cmd_use() {
         mkdir -p "$STATE_DIR"
         cp "$CONFIG" "$STATE_DIR/$src.toml"
         printf "${DGRAY}  💾 已保存状态：%s${C}\n" "$src"
+        save_model_auth "$src"
     else
         warn "  当前配置未匹配模板，未保存状态"
     fi
@@ -253,15 +280,20 @@ cmd_use() {
     local content="$tpl" mode="模板初始化"
     [ -f "$STATE_DIR/$name.toml" ] && { content="$STATE_DIR/$name.toml"; mode="状态恢复"; }
 
-    # 3. 备份
+    # 3. 备份（config 与 auth 同时间戳，保留 5 份以 config 为准）
     mkdir -p "$BACKUP_DIR"
-    local bak="$BACKUP_DIR/config.$(date +%Y%m%d-%H%M%S-%N).toml"
+    local ts bak
+    ts="$(date +%Y%m%d-%H%M%S-%N)"
+    bak="$BACKUP_DIR/config.$ts.toml"
     cp "$CONFIG" "$bak"
+    [ -f "$AUTH_FILE" ] && cp "$AUTH_FILE" "$BACKUP_DIR/auth.$ts.json"
     local backups=() backup
     mapfile -t backups < <(find "$BACKUP_DIR" -maxdepth 1 -type f -name 'config.*.toml' -printf '%f\n' | sort -r)
     if [ "${#backups[@]}" -gt 5 ]; then
         for backup in "${backups[@]:5}"; do
-            rm -f "$BACKUP_DIR/$backup"
+            local bts="${backup#config.}"
+            bts="${bts%.toml}"
+            rm -f "$BACKUP_DIR/$backup" "$BACKUP_DIR/auth.$bts.json"
         done
     fi
     printf "${DGRAY}  📦 已备份：%s${C}\n" "$(basename "$bak")"
@@ -271,6 +303,18 @@ cmd_use() {
     cp "$content" "$tmp"
     [ -s "$tmp" ] || fail "原子写校验失败：临时文件为空"
     mv "$tmp" "$CONFIG"
+
+    # 4.5 同步 auth.json（内容永不打印）
+    local auth_src
+    auth_src="$(get_switch_auth "$name")"
+    if [ -n "$auth_src" ]; then
+        cp "$auth_src" "$AUTH_FILE.tmp"
+        [ -s "$AUTH_FILE.tmp" ] || fail "原子写校验失败：auth 临时文件为空"
+        mv "$AUTH_FILE.tmp" "$AUTH_FILE"
+        printf "${GREEN}  🔑 auth.json 已同步（%s）${C}\n" "$name"
+    else
+        printf "${DGRAY}  🔑 该模型未托管 auth.json，保持现状${C}\n"
+    fi
 
     # 5. 输出（掩码密钥）
     local lines

@@ -135,6 +135,42 @@ $moduleText = [System.IO.File]::ReadAllText($modulePath, [System.Text.UTF8Encodi
 Assert-True ($moduleText -match 'Get-SourceVersion' -and $moduleText -notmatch 'sourceVsRelease') '更新决策只比较 VERSION 与本机版本'
 Assert-True ($moduleText -match '下载资产版本 v\$packageVersion 与 VERSION v\$sourceVersion 不一致') '下载资产必须校验 VERSION'
 
+Write-Host "`n=== Test 11: Save-ModelAuth 保存/覆盖/删除空态 ===" -ForegroundColor Cyan
+$tmpAuth = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $tmpAuth | Out-Null
+try {
+    $authFile = Join-Path $tmpAuth 'auth.json'
+    [System.IO.File]::WriteAllText($authFile, '{ "token": "test-token-aaaaaaa1111111" }', [System.Text.UTF8Encoding]::new($false))
+    $stateDir = Join-Path $tmpAuth 'states'
+    Save-ModelAuth -Name 'deepseek' -AuthPath $authFile -StateDir $stateDir
+    Assert-True ([System.IO.File]::Exists((Join-Path $stateDir 'deepseek.auth.json'))) 'auth 状态已保存'
+    [System.IO.File]::WriteAllText($authFile, '{ "token": "test-token-bbbbbbb2222222" }', [System.Text.UTF8Encoding]::new($false))
+    Save-ModelAuth -Name 'deepseek' -AuthPath $authFile -StateDir $stateDir
+    Assert-True ((([System.IO.File]::ReadAllText((Join-Path $stateDir 'deepseek.auth.json'))).Contains('test-token-bbbbbbb2222222'))) '再次保存覆盖旧状态'
+    [System.IO.File]::Delete($authFile)
+    Save-ModelAuth -Name 'deepseek' -AuthPath $authFile -StateDir $stateDir
+    Assert-True (-not [System.IO.File]::Exists((Join-Path $stateDir 'deepseek.auth.json'))) 'auth 不存在时删除旧状态（空态）'
+} finally { Remove-Item $tmpAuth -Recurse -Force -ErrorAction SilentlyContinue }
+
+Write-Host "`n=== Test 12: Get-SwitchAuth 状态 > 模板 > 无托管 ===" -ForegroundColor Cyan
+$tmpAuth2 = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path (Join-Path $tmpAuth2 'models'), (Join-Path $tmpAuth2 'states') | Out-Null
+try {
+    $models2 = Join-Path $tmpAuth2 'models'
+    $states2 = Join-Path $tmpAuth2 'states'
+    [System.IO.File]::WriteAllText((Join-Path $models2 'gpt.auth.json'), '{ "token": "test-token-tpl-auth" }', [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText((Join-Path $states2 'gpt.auth.json'), '{ "token": "test-token-state-auth" }', [System.Text.UTF8Encoding]::new($false))
+    $a = Get-SwitchAuth -Name 'gpt' -ModelsDir $models2 -StateDir $states2
+    Assert-True ($a.Source -eq 'state') '有状态时用状态'
+    Assert-True ($a.Content.Contains('test-token-state-auth')) '恢复的是状态内容'
+    [System.IO.File]::Delete((Join-Path $states2 'gpt.auth.json'))
+    $b = Get-SwitchAuth -Name 'gpt' -ModelsDir $models2 -StateDir $states2
+    Assert-True ($b.Source -eq 'template') '无状态用模板'
+    Assert-True ($b.Content.Contains('test-token-tpl-auth')) '恢复的是模板内容'
+    $c = Get-SwitchAuth -Name 'nonexist' -ModelsDir $models2 -StateDir $states2
+    Assert-True ($null -eq $c.Source) '无托管时 Source 为 $null'
+} finally { Remove-Item $tmpAuth2 -Recurse -Force -ErrorAction SilentlyContinue }
+
 Write-Host "`n=== 总结 ===" -ForegroundColor Cyan
 Write-Host "通过: $pass" -ForegroundColor Green
 Write-Host "失败: $fail" -ForegroundColor $(if ($fail -eq 0) { 'Green' } else { 'Red' })

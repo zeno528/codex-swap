@@ -9,12 +9,14 @@ Codex 的 `config.toml` 是活的状态：使用中 App 会持续写入信任项
 
 ## 方案：模板播种 + 状态恢复
 
-每个模型两份配置：
+每个模型两份配置（config 与 auth 各一套，机制对称）：
 
 | 配置 | 路径 | 角色 |
 |:-----|:-----|:-----|
 | 模板 | `~/.codex/models/<name>.toml` | 首次使用种子，静态，可编辑 |
 | 状态 | `~/.codex/model-states/<name>.toml` | 最近一次使用的完整 config，动态演进 |
+| auth 模板 | `~/.codex/models/<name>.auth.json` | 模型专属登录凭据种子（可选） |
+| auth 状态 | `~/.codex/model-states/<name>.auth.json` | 最近一次切出时的 auth.json 快照 |
 
 ## 切换链路
 
@@ -23,15 +25,18 @@ Codex 的 `config.toml` 是活的状态：使用中 App 会持续写入信任项
 config.toml ───────────────► model-states/deepseek.toml   （1:1 拷贝）
 config.toml ◄─────────────── model-states/gpt.toml        （存在则恢复）
                             （不存在 → models/gpt.toml 模板播种）
+auth.json ────────────────► model-states/<src>.auth.json  （仅源模型托管 auth 时）
+auth.json ◄──────────────── model-states/<target>.auth.json（优先）
+                            models/<target>.auth.json（模板兜底，未托管则不碰）
 ```
 
 `use <name>` 五步：
 
 1. **识别源**：`Resolve-ActiveMarkers` 两阶段 — model+provider 匹配 → 多命中时按 token 指纹（前6|后6）精筛
-2. **存源状态**：`Save-ModelState` 原样拷贝
-3. **取目标**：`Get-SwitchContent` 状态优先、模板兜底
-4. **备份**：`Backup-Config` → `backups_model/`（保留 5 份）
-5. **原子写**：tmp → 校验非空 → Move 覆盖，失败删 tmp 回滚
+2. **存源状态**：`Save-ModelState` 原样拷贝；源模型托管 auth 时 `Save-ModelAuth` 同步快照（auth.json 不存在则删除旧快照记录空态）
+3. **取目标**：`Get-SwitchContent` 状态优先、模板兜底；auth 同理由 `Get-SwitchAuth` 解析
+4. **备份**：`Backup-Config` → `backups_model/`（config + auth 同时间戳，保留 5 份以 config 为准，过期时配套删除）
+5. **原子写**：config 与 auth.json 均 tmp → 校验非空 → Move 覆盖，失败删 tmp 回滚；auth 内容永不打印
 
 ## 模块结构
 
@@ -41,7 +46,8 @@ windows/src/
 ├── codex-switch.psm1        # 全部逻辑
 │   ├── 纯函数（可测试）: Get-TemplateFingerprint / Get-CurrentFingerprint /
 │   │   Resolve-ActiveMarkers / Resolve-ActiveName / Save-ModelState /
-│   │   Get-SwitchContent / Compare-Version / Get-DisplayWidth / Get-CodexHome
+│   │   Get-SwitchContent / Save-ModelAuth / Get-SwitchAuth /
+│   │   Compare-Version / Get-DisplayWidth / Get-CodexHome
 │   └── 命令: Invoke-CodexSwitch（分发）/ Invoke-Menu / Invoke-List /
 │       Invoke-Current / Invoke-Use / Invoke-Update / Invoke-Doctor
 └── codex-switch.ps1         # 入口：Import-Module + 分发

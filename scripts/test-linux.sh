@@ -34,6 +34,34 @@ grep -q '已切换至 deepseek' <<< "$output"
 grep -q 'trusted_project = "test-project"' "$CODEX_HOME/model-states/gpt.toml"
 cmp "$test_root/deepseek-before.toml" "$CODEX_HOME/config.toml"
 test "$(find "$CODEX_HOME/backups_model" -name '*.toml' | wc -l)" -ge 2
+
+# === auth.json 快照链路 ===
+printf '%s\n' '{ "token": "test-token-deepseek-auth" }' > "$CODEX_HOME/models/deepseek.auth.json"
+printf '%s\n' '{ "token": "test-token-gpt-auth" }' > "$CODEX_HOME/models/gpt.auth.json"
+printf '%s\n' '{ "token": "test-token-deepseek-auth" }' > "$CODEX_HOME/auth.json"
+
+output="$(bash linux/codex-switch use gpt)"
+grep -q '已切换至 gpt' <<< "$output"
+grep -q 'auth.json 已同步（gpt）' <<< "$output"
+grep -q 'test-token-gpt-auth' "$CODEX_HOME/auth.json"
+test ! -f "$CODEX_HOME/model-states/gpt.auth.json"
+
+printf '%s\n' '{ "token": "test-token-gpt-auth-grown" }' > "$CODEX_HOME/auth.json"
+output="$(bash linux/codex-switch use deepseek)"
+grep -q '已保存 auth 状态：gpt' <<< "$output"
+grep -q 'test-token-gpt-auth-grown' "$CODEX_HOME/model-states/gpt.auth.json"
+grep -q 'test-token-deepseek-auth' "$CODEX_HOME/auth.json"
+
+output="$(bash linux/codex-switch use gpt)"
+grep -q 'auth.json 已同步（gpt）' <<< "$output"
+grep -q 'test-token-gpt-auth-grown' "$CODEX_HOME/auth.json"
+test "$(find "$CODEX_HOME/backups_model" -name 'auth.*.json' | wc -l)" -ge 1
+
+# 未托管 auth 的模型不触碰 auth.json
+printf '%s\n' 'model = "claude-4"' 'model_provider = "anthropic"' > "$CODEX_HOME/models/claude.toml"
+output="$(bash linux/codex-switch use claude)"
+grep -q '该模型未托管 auth.json，保持现状' <<< "$output"
+grep -q 'test-token-gpt-auth-grown' "$CODEX_HOME/auth.json"
 output="$(printf '1\nq\nq\n' | bash linux/codex-switch 2>&1)"
 test "$(grep -o '模型切换' <<< "$output" | wc -l)" -eq 1
 

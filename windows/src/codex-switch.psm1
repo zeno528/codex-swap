@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.18'
+$script:ScriptVersion = '0.2.19'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-switch'
 $script:ReleaseAsset   = 'codex-switch-windows.zip'
@@ -16,6 +16,7 @@ function Get-CodexHome {
 
 $script:CodexHome  = Get-CodexHome
 $script:ConfigPath = Join-Path $script:CodexHome 'config.toml'
+$script:AuthPath   = Join-Path $script:CodexHome 'auth.json'
 $script:ModelsDir  = Join-Path $script:CodexHome 'models'
 $script:BackupDir  = Join-Path $script:CodexHome 'backups_model'
 $script:StateDir   = Join-Path $script:CodexHome 'model-states'
@@ -233,6 +234,48 @@ function Get-SwitchContent {
     }
 }
 
+# === 核心：切出时保存/清空模型 auth 状态（auth 存在→复制；不存在→删旧状态）===
+function Save-ModelAuth {
+    param(
+        [Parameter(Mandatory)] [string]$Name,
+        [Parameter(Mandatory)] [string]$AuthPath,
+        [Parameter(Mandatory)] [string]$StateDir
+    )
+    if (-not [System.IO.Directory]::Exists($StateDir)) {
+        [System.IO.Directory]::CreateDirectory($StateDir) | Out-Null
+    }
+    $statePath = Join-Path $StateDir "$Name.auth.json"
+    if ([System.IO.File]::Exists($AuthPath)) {
+        [System.IO.File]::Copy($AuthPath, $statePath, $true)
+    } elseif ([System.IO.File]::Exists($statePath)) {
+        [System.IO.File]::Delete($statePath)
+    }
+}
+
+# === 核心：切入时取目标 auth 源 — 状态优先，首次才用模板；无托管 Source 为 $null ===
+function Get-SwitchAuth {
+    param(
+        [Parameter(Mandatory)] [string]$Name,
+        [Parameter(Mandatory)] [string]$ModelsDir,
+        [Parameter(Mandatory)] [string]$StateDir
+    )
+    $statePath = Join-Path $StateDir "$Name.auth.json"
+    if ([System.IO.File]::Exists($statePath)) {
+        return @{
+            Source  = 'state'
+            Content = [System.IO.File]::ReadAllText($statePath, [System.Text.UTF8Encoding]::new($false))
+        }
+    }
+    $tplPath = Join-Path $ModelsDir "$Name.auth.json"
+    if ([System.IO.File]::Exists($tplPath)) {
+        return @{
+            Source  = 'template'
+            Content = [System.IO.File]::ReadAllText($tplPath, [System.Text.UTF8Encoding]::new($false))
+        }
+    }
+    return @{ Source = $null; Content = $null }
+}
+
 # === 备份 ===
 function Backup-Config {
     if (-not [System.IO.Directory]::Exists($script:BackupDir)) {
@@ -241,10 +284,18 @@ function Backup-Config {
     $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss-fffffff'
     $backupPath = Join-Path $script:BackupDir "config.$timestamp.toml"
     [System.IO.File]::Copy($script:ConfigPath, $backupPath, $true)
+    if ([System.IO.File]::Exists($script:AuthPath)) {
+        [System.IO.File]::Copy($script:AuthPath, (Join-Path $script:BackupDir "auth.$timestamp.json"), $true)
+    }
     $files = [System.IO.Directory]::GetFiles($script:BackupDir, 'config.*.toml') |
         Sort-Object { [System.IO.File]::GetLastWriteTime($_) } -Descending
     if ($files.Count -gt 5) {
-        $files | Select-Object -Skip 5 | ForEach-Object { [System.IO.File]::Delete($_) }
+        $files | Select-Object -Skip 5 | ForEach-Object {
+            $bts = [System.IO.Path]::GetFileNameWithoutExtension($_).Substring('config.'.Length)
+            $authBak = Join-Path $script:BackupDir "auth.$bts.json"
+            if ([System.IO.File]::Exists($authBak)) { [System.IO.File]::Delete($authBak) }
+            [System.IO.File]::Delete($_)
+        }
     }
     return $backupPath
 }
@@ -412,6 +463,14 @@ function Invoke-Use {
     if ($null -ne $sourceName) {
         Save-ModelState -Name $sourceName -ConfigPath $script:ConfigPath -StateDir $script:StateDir
         Write-ColorOutput "💾 已保存 $sourceName 的最新状态" DarkGray
+        $srcAuthTpl = Join-Path $script:ModelsDir "$sourceName.auth.json"
+        $srcAuthState = Join-Path $script:StateDir "$sourceName.auth.json"
+        if ([System.IO.File]::Exists($srcAuthTpl) -or [System.IO.File]::Exists($srcAuthState)) {
+            Save-ModelAuth -Name $sourceName -AuthPath $script:AuthPath -StateDir $script:StateDir
+            if ([System.IO.File]::Exists($script:AuthPath)) {
+                Write-ColorOutput "🔑 已保存 $sourceName 的 auth 状态" DarkGray
+            }
+        }
     } else {
         Write-ColorOutput "⚠️ 当前 config 匹配不到任何模板，跳过状态保存（本次配置仍会备份）" Yellow
     }
@@ -447,6 +506,26 @@ function Invoke-Use {
     $mode = if ($switch.Source -eq 'state') { '状态恢复' } else { '模板初始化' }
     $lineCount = ($newContent -split [char]10).Count
     Write-ColorOutput "✅ 已切换到: $Name（$mode，$lineCount 行）" Green
+
+    # 5.5 同步 auth.json（内容永不打印）
+    $auth = Get-SwitchAuth -Name $Name -ModelsDir $script:ModelsDir -StateDir $script:StateDir
+    if ($null -ne $auth.Source) {
+        $authTmp = "$($script:AuthPath).tmp"
+        try {
+            [System.IO.File]::WriteAllText($authTmp, ($auth.Content.TrimEnd()) + "`n", [System.Text.UTF8Encoding]::new($false))
+            $authVerify = [System.IO.File]::ReadAllText($authTmp, [System.Text.UTF8Encoding]::new($false))
+            if ([string]::IsNullOrWhiteSpace($authVerify)) {
+                throw "原子写校验失败：auth 临时文件为空"
+            }
+            [System.IO.File]::Move($authTmp, $script:AuthPath, $true)
+        } catch {
+            if ([System.IO.File]::Exists($authTmp)) { [System.IO.File]::Delete($authTmp) }
+            throw
+        }
+        Write-ColorOutput "🔑 auth.json 已同步（$Name）" Green
+    } else {
+        Write-ColorOutput "🔑 该模型未托管 auth.json，保持现状" DarkGray
+    }
     foreach ($line in ($newContent -split [char]10)) {
         $t = $line.Trim()
         if ($t -eq '') { continue }

@@ -1,6 +1,6 @@
 @{
     RootModule        = 'codex-switch.psm1'
-    ModuleVersion     = '0.2.18'
+    ModuleVersion     = '0.2.19'
     GUID              = '3a7c9f2e-5b4d-4a1c-9e8f-6d2b7a4c1e50'
     Author            = 'Scott Z'
     CompanyName       = 'zeno528'
@@ -15,6 +15,8 @@
         'Resolve-ActiveName',
         'Save-ModelState',
         'Get-SwitchContent',
+        'Save-ModelAuth',
+        'Get-SwitchAuth',
         'Compare-Version',
         'Get-DisplayWidth',
         'Get-CodexHome'
