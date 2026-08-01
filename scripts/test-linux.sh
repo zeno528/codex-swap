@@ -89,11 +89,12 @@ grep -q '找不到资产 codex-switch-linux.zip' <<< "$output"
 wizard_home="$test_root/wizard"
 mkdir -p "$wizard_home"
 
-# 未装 codex：输出安装命令并退出（若 runner 预装 codex 则跳过安装提示断言）
+# 未装 codex：输出安装命令并询问代执行（若 runner 预装 codex 则跳过安装提示断言）
 if ! command -v codex >/dev/null 2>&1; then
     output="$(CODEX_HOME="$wizard_home" bash linux/codex-switch menu </dev/null 2>&1)"
     grep -q '未检测到 codex CLI' <<< "$output"
     grep -q 'curl -fsSL https://chatgpt.com/codex/install.sh' <<< "$output"
+    grep -q '是否现在帮你执行安装命令' <<< "$output"
 fi
 
 # 内置 🐳 DeepSeek 模板：假 codex + 管道输入走完整向导

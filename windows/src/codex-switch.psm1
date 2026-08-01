@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.27'
+$script:ScriptVersion = '0.2.28'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-switch'
 $script:ReleaseAsset   = 'codex-switch-windows.zip'
@@ -876,7 +876,7 @@ function Invoke-FirstRun {
     Write-ColorOutput "  引导完成 Codex 检查、模型模板与 API Key 配置" DarkGray
     Write-ColorOutput "" White
 
-    # ① codex CLI 检查（未安装：输出官方安装命令并退出向导）
+    # ① codex CLI 检查（未安装：输出官方安装命令，可代执行；不装则退出向导）
     $hints = Get-CodexInstallHint
     if ($null -ne $hints) {
         Write-ColorOutput "⚠️ 未检测到 codex CLI，首次使用需要先安装" Yellow
@@ -884,7 +884,32 @@ function Invoke-FirstRun {
         Write-ColorOutput "安装命令（官方独立安装器）：" Green
         foreach ($h in $hints) { Write-ColorOutput "  $h" White }
         Write-ColorOutput "" White
-        Write-ColorOutput "安装完成后重新运行 codex-switch 即可进入向导" DarkGray
+        $ans = Read-Host '是否现在帮你执行安装命令？[Y/n]'
+        if ($ans -eq '' -or $ans -eq 'y' -or $ans -eq 'Y') {
+            Write-ColorOutput "⬇️  正在安装 codex，请稍候…" DarkGray
+            if ($IsWindows) {
+                & powershell.exe -NoProfile -ExecutionPolicy ByPass -Command 'irm https://chatgpt.com/codex/install.ps1 | iex' | Out-Null
+                $installOk = ($LASTEXITCODE -eq 0)
+                $localBin = Join-Path $env:USERPROFILE '.local\bin'
+            } else {
+                & sh -c 'curl -fsSL https://chatgpt.com/codex/install.sh | sh' | Out-Null
+                $installOk = ($LASTEXITCODE -eq 0)
+                $localBin = Join-Path $env:HOME '.local/bin'
+            }
+            if ($installOk) {
+                if ($IsWindows) { $env:PATH = "${localBin};$env:PATH" } else { $env:PATH = "${localBin}:$env:PATH" }
+                $codexCmd = Get-Command codex -ErrorAction SilentlyContinue
+                if ($null -ne $codexCmd) {
+                    Write-ColorOutput "✅ codex 安装成功：$($codexCmd.Source)" Green
+                    return $true
+                }
+                Write-ColorOutput "⚠️ 安装完成但未找到 codex 命令，请检查 PATH 后重新运行" Yellow
+                return $false
+            }
+            Write-ColorOutput "⚠️ 安装失败（网络或权限问题），请手动执行上面的命令" Yellow
+            return $false
+        }
+        Write-ColorOutput "请手动执行上面的命令，安装完成后重新运行 codex-switch" DarkGray
         return $false
     }
 
