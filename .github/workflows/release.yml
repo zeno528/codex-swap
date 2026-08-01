@@ -65,3 +65,15 @@ jobs:
           gh release create "$tag" codex-switch-windows.zip codex-switch-linux.zip --target "$GITHUB_SHA" --notes-file NOTES.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prune old releases (仅保留最新 2 个)
+        run: |
+          # 发行版界面最多保留最新 2 个 release：新版本发布时，第 3 个及更早的旧 release 被删除（tag 保留）
+          gh release list --limit 100 \
+            --json tagName,publishedAt \
+            --jq '[.[] | select(.publishedAt != null)] | sort_by(.publishedAt) | reverse | .[2:][] | .tagName' \
+            | while read -r old_tag; do
+                echo "  删除旧 Release: $old_tag"
+                gh release delete "$old_tag" --yes
+              done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
