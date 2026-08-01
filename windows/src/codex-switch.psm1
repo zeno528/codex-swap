@@ -8,6 +8,7 @@ $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-switch'
 $script:ReleaseAsset   = 'codex-switch-windows.zip'
 $script:VersionUrl     = "https://raw.githubusercontent.com/$($script:RepoOwner)/$($script:RepoName)/main/VERSION"
+$script:RepoUrl        = "https://github.com/$($script:RepoOwner)/$($script:RepoName)"
 
 function Get-CodexHome {
     return Join-Path $env:USERPROFILE '.codex'
@@ -388,7 +389,7 @@ function Invoke-List {
         Write-Host ''
     }
 
-    Show-TitleBox '🔍 可用模型模板' Cyan
+    Show-TitleBox '🔍 可用模型配置' Cyan
     Write-Host (_HLine '╭' '┬' '╮') -ForegroundColor DarkGray
     Write-HeadRow $headers Cyan
     Write-Host (_HLine '├' '┼' '┤') -ForegroundColor DarkGray
@@ -467,6 +468,10 @@ function Invoke-Menu {
         # 每次重绘菜单前清屏，避免终端内容无限累积
         Clear-Host
         Show-TitleBox "💻 codex-switch v$($script:ScriptVersion) — 模型切换" Cyan
+        $esc = [char]27
+        Write-Host "  ${esc}]8;;$($script:RepoUrl)${esc}\" -NoNewline -ForegroundColor Cyan
+        Write-Host $script:RepoUrl -NoNewline -ForegroundColor Cyan
+        Write-Host "${esc}]8;;${esc}\" -ForegroundColor Cyan
         Write-ColorOutput "   选数字切模型，q 退出" DarkGray
         Write-ColorOutput "" White
 

@@ -12,6 +12,7 @@ set -euo pipefail
 VERSION="@VERSION@"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
+REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
 ASSET_NAME="codex-switch-linux.zip"
 API_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
 VERSION_URL="https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/VERSION"
@@ -206,7 +207,7 @@ cmd_list() {
     cur_model=$(get_field "$CONFIG" model)
     cur_provider=$(get_field "$CONFIG" model_provider)
 
-    printf "${BOLD_CYAN}  🔍 模型模板${C}\n"
+    printf "${BOLD_CYAN}  🔍 模型配置${C}\n"
     table_rule '╭' '┬' '╮' 4 6 14 26 14
     table_row '编号' '状态' '名称' '模型' '提供方' "$BOLD_CYAN"
     table_rule '├' '┼' '┤' 4 6 14 26 14
@@ -355,6 +356,7 @@ cmd_menu() {
     while true; do
         clear
         printf "${BOLD_CYAN}  💻 codex-switch v%s · 模型切换${C}\n" "$VERSION"
+        printf "${CYAN}  \e]8;;$REPO_URL\e\\$REPO_URL\e]8;;\e\\${C}\n"
         echo ""
         cmd_list
         local files=("$MODELS_DIR"/*.toml) prompt
