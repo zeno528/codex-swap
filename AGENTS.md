@@ -30,7 +30,7 @@ scripts/              构建与校验脚本（build.sh / verify-release.sh / tes
 3. `windows/src/codex-switch.psd1` → `ModuleVersion = '@VERSION@'`
 
 - 改版本：只改 `VERSION` 一个文件；本地验证用 `scripts/build.sh --inject`
-- `pre-commit` hook（`.githooks/pre-commit`，`core.hooksPath` 指向 `.githooks`）：每次提交自动递增 `VERSION` 的 patch（99 进位，0.0.99 → 0.1.0）；检测到工作区 `VERSION` ≠ HEAD 时跳过（发版手动升 minor/major 不重复递增）
+- `pre-commit` hook（`.githooks/pre-commit`，`core.hooksPath` 指向 `.githooks`）：改动发布物相关文件（`linux/*`、`windows/src/*`、`windows/bin/*`、安装器、`scripts/build.sh`）时自动递增 `VERSION` 的 patch（99 进位，0.0.99 → 0.1.0）；纯文档/CI/元数据改动不递增；检测到工作区 `VERSION` ≠ HEAD 时跳过（发版手动升 minor/major 不重复递增）
 - 构建/发版：`scripts/build.sh --package` 注入并产出双 zip；`scripts/verify-release.sh [tag] [zip...]` 校验 VERSION 格式、源码占位符状态、包内注入版本
 - 发版流程：递增 VERSION → 跑全量测试 → commit 并推送 main；release workflow 自动读取 VERSION、创建同名 vX.Y.Z tag、构建双 zip 并创建 Release
 - git tag 由 release workflow 创建；源码永远不提交注入产物

@@ -1,12 +1,29 @@
 #!/usr/bin/env bash
-# pre-commit: 提交时自动递增 VERSION 文件（唯一版本源，patch，99 进位）
+# pre-commit: 仅在改动发布物相关文件时自动递增 VERSION（唯一版本源，patch，99 进位）
 # 三处源码为 @VERSION@ 占位符，由 scripts/build.sh 在构建/发布时注入；tag 不发版时不打
+# 文档/CI/元数据改动不递增，避免版本信号失真（README 提交不给用户制造"假更新"）
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 VF="$ROOT/VERSION"
 
 [ -f "$VF" ] || { echo "pre-commit: 跳过版本递增（缺 $VF）"; exit 0; }
+
+# 发布物相关路径：改动这些才递增；其余（README/docs/CI/.githooks 等）跳过
+is_release_change() {
+    while IFS= read -r f; do
+        case "$f" in
+            linux/*|windows/src/*|windows/bin/*|windows/install.ps1|windows/uninstall.ps1|scripts/build.sh)
+                return 0 ;;
+        esac
+    done < <(git diff --cached --name-only)
+    return 1
+}
+
+if ! is_release_change; then
+    echo "pre-commit: 未改动发布物相关文件，跳过版本递增"
+    exit 0
+fi
 
 bump() {
     IFS='.' read -r major minor patch <<< "$1"
