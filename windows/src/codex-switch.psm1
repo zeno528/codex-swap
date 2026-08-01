@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.33'
+$script:ScriptVersion = '0.2.34'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-switch'
 $script:ReleaseAsset   = 'codex-switch-windows.zip'
@@ -549,9 +549,9 @@ function Invoke-List {
         $rows.Add(@{
             Num     = "$(($i + 1))"
             Status  = $marker
-            Name    = (Format-TemplateName $name)
+            Name    = $name
             Model   = $tplModel
-            Provider = $tplProvider
+            Provider = "$(Get-ProviderIcon $tplProvider $tplModel)$tplProvider"
         })
     }
 
@@ -693,7 +693,7 @@ function Invoke-Use {
 
     $mode = if ($switch.Source -eq 'state') { '状态恢复' } else { '模板初始化' }
     $lineCount = ($newContent -split [char]10).Count
-    Write-ColorOutput "✅ 已切换到: $(Format-TemplateName $Name)（$mode，$lineCount 行）" Green
+    Write-ColorOutput "✅ 已切换到: $Name（$mode，$lineCount 行）" Green
 
     # 5.5 同步 auth.json（内容永不打印；无记录则清空防凭据串用）
     $auth = Get-SwitchAuth -Name $Name -ModelsDir $script:ModelsDir -StateDir $script:StateDir
@@ -733,10 +733,13 @@ function Invoke-Use {
 }
 
 # === 工具：模板显示名（DeepSeek 系列带 🐳） ===
-function Format-TemplateName {
-    param([Parameter(Mandatory)] [string]$Name)
-    if ($Name -like 'deepseek*') { return "🐳 $Name" }
-    return $Name
+function Get-ProviderIcon {
+    param([AllowNull()] [string]$Provider, [AllowNull()] [string]$Model)
+    if ($Provider -like 'deepseek*') { return '🐳 ' }
+    if ($Provider -like 'openai*') { return '💠 ' }
+    if ($Model -like 'deepseek*') { return '🐳 ' }
+    if ($Model -like 'gpt*') { return '💠 ' }
+    return ''
 }
 
 # === 向导：检测 codex CLI（未安装返回安装命令列表，已安装返回 $null） ===
@@ -1008,9 +1011,9 @@ function Invoke-Menu {
                 $rows.Add(@{
                     Num      = "$(($i + 1))"
                     Status   = $marker
-                    Name     = (Format-TemplateName $name)
+                    Name     = $name
                     Model    = $tplModel
-                    Provider = $tplProvider
+                    Provider = "$(Get-ProviderIcon $tplProvider $tplModel)$tplProvider"
                 })
             }
 
@@ -1324,7 +1327,7 @@ Export-ModuleMember -Function @(
     'Compare-Version',
     'Get-DisplayWidth',
     'Get-CodexHome',
-    'Format-TemplateName',
+    'Get-ProviderIcon',
     'Get-CodexInstallHint',
     'Test-CodexVersion',
     'Write-TemplateFile',

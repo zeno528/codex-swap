@@ -9,7 +9,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.33"
+VERSION="0.2.34"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -204,12 +204,19 @@ table_cell_center() {
     printf "${DGRAY}│%*s${C}${color}%s${C}${DGRAY}%*s${C}" "$left" '' "$value" "$right" ''
 }
 
-# === 工具：模板显示名（DeepSeek 系列带 🐳） ===
-fmt_name() {
-    local name="$1"
-    case "$name" in
-        deepseek*) printf "🐳 %s" "$name" ;;
-        *)         printf "%s" "$name" ;;
+# === 工具：供应商图标（以 model_provider 判别；为空时按模型名前缀回退） ===
+provider_icon() {
+    local provider="$1" model="$2"
+    case "$provider" in
+        [Dd]eepseek*) printf "🐳 " ;;
+        [Oo]penai*)   printf "💠 " ;;
+        *)
+            case "$model" in
+                [Dd]eepseek*) printf "🐳 " ;;
+                [Gg]pt*)      printf "💠 " ;;
+                *)            printf "" ;;
+            esac
+            ;;
     esac
 }
 
@@ -281,7 +288,7 @@ cmd_list() {
             status='✅'
             color="$GREEN"
         fi
-        table_row "$i" "$status" "$(fmt_name "$name")" "${model:--}" "${provider:--}" "$color"
+        table_row "$i" "$status" "$name" "${model:--}" "$(provider_icon "$provider" "$model")${provider:--}" "$color"
     done
     table_rule '╰' '┴' '╯' 4 6 16 26 14
 }
@@ -352,7 +359,7 @@ cmd_use() {
     # 5. 输出（掩码密钥）
     local lines
     lines=$(wc -l < "$CONFIG")
-    printf "${GREEN}  ✅ 已切换至 %s${C}\n" "$(fmt_name "$name")"
+    printf "${GREEN}  ✅ 已切换至 %s${C}\n" "$name"
     printf "${DGRAY}  来源：%s · %s 行${C}\n\n" "$mode" "$lines"
     printf "${BOLD_CYAN}  📋 当前配置${C}\n"
     local n=0

@@ -181,9 +181,11 @@ if ($null -ne $hint) {
 }
 $vt = Test-CodexVersion
 Assert-True ($null -eq $vt -or $vt -is [bool]) 'Test-CodexVersion 返回 $null 或 bool'
-Assert-True ((Format-TemplateName 'deepseek') -eq '🐳 deepseek') 'deepseek 显示 🐳'
-Assert-True ((Format-TemplateName 'deepseek-pro') -eq '🐳 deepseek-pro') 'deepseek-pro 显示 🐳'
-Assert-True ((Format-TemplateName 'gpt') -eq 'gpt') '其他模型不加图标'
+Assert-True ((Get-ProviderIcon 'deepseek' 'x') -eq '🐳 ') 'deepseek 供应商显示 🐳'
+Assert-True ((Get-ProviderIcon 'openai' 'x') -eq '💠 ') 'openai 供应商显示 💠'
+Assert-True ((Get-ProviderIcon '' 'gpt-5.6-terra') -eq '💠 ') 'provider 为空按模型回退 💠'
+Assert-True ((Get-ProviderIcon 'custom' 'deepseek-v4-flash') -eq '🐳 ') '模型名 deepseek 回退 🐳'
+Assert-True ((Get-ProviderIcon 'custom' 'custom-model') -eq '') '未知供应商不加图标'
 
 Write-Host "`n=== Test 14: 内置模板写入（DeepSeek + 官方 models.json） ===" -ForegroundColor Cyan
 $tmpW = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
