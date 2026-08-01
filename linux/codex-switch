@@ -9,7 +9,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.17"
+VERSION="0.2.18"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -361,11 +361,11 @@ cmd_menu() {
         cmd_list
         local files=("$MODELS_DIR"/*.toml) prompt
         if [ -f "${files[0]:-}" ]; then
-            printf "${DGRAY}  操作：U 更新 · O 打开模板目录 · Enter 刷新 · Q 退出${C}\n"
+            printf "${DGRAY}  操作：U 更新 · O 打开模板目录 · X 卸载 · Enter 刷新 · Q 退出${C}\n"
             echo ""
             prompt="  选择模型 [1-${#files[@]}] › "
         else
-            prompt="  操作：U 更新 · O 打开模板目录 · Enter 刷新 · Q 退出 › "
+            prompt="  操作：U 更新 · O 打开模板目录 · X 卸载 · Enter 刷新 · Q 退出 › "
         fi
         read -r -p "$prompt" choice || break
         case "$choice" in
@@ -378,6 +378,22 @@ cmd_menu() {
                     wait_for_menu "  按回车重新加载菜单，q 退出 › " || return 0
                     exec bash "$(readlink -f "$0")"
                 fi
+                wait_for_menu "  按回车返回菜单，q 退出 › " || return 0
+                continue
+                ;;
+            x|X)
+                read -r -p "  确认卸载 codex-switch？（~/.codex 数据保留）[y/N] " ans
+                case "$ans" in
+                    y|Y|yes)
+                        rm -f "$(readlink -f "$0")"
+                        if [ -L "$HOME/.local/bin/cxs" ] && [ "$(readlink "$HOME/.local/bin/cxs")" = "codex-switch" ]; then
+                            rm -f "$HOME/.local/bin/cxs"
+                        fi
+                        say "  ✅ 已卸载 codex-switch（~/.codex 数据保留）"
+                        return 0
+                        ;;
+                    *) warn "  已取消卸载" ;;
+                esac
                 wait_for_menu "  按回车返回菜单，q 退出 › " || return 0
                 continue
                 ;;
