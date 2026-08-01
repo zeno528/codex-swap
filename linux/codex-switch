@@ -344,6 +344,12 @@ show_help() {
     echo "      菜单内: o 打开模板目录，u 检查并升级"
 }
 
+wait_for_menu() {
+    local choice
+    read -r -p "$1" choice || return 1
+    case "$choice" in q|Q) return 1 ;; esac
+}
+
 # === 交互式菜单 ===
 cmd_menu() {
     while true; do
@@ -367,10 +373,10 @@ cmd_menu() {
             u|U)
                 cmd_update
                 if [ "$UPDATED" = true ]; then
-                    read -r -p "    按回车重新加载菜单" _ || break
+                    wait_for_menu "    按回车重新加载菜单，q 退出" || return 0
                     exec bash "$(readlink -f "$0")"
                 fi
-                read -r -p "    按回车返回菜单" _ || break
+                wait_for_menu "    按回车返回菜单，q 退出" || return 0
                 continue
                 ;;
         esac
@@ -379,14 +385,14 @@ cmd_menu() {
             if [ -f "${files[0]:-}" ] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#files[@]}" ]; then
                 name=$(basename "${files[$((choice-1))]}" .toml)
                 cmd_use "$name" || true
-                read -r -p "    按回车返回菜单" _ || break
+                wait_for_menu "    按回车返回菜单，q 退出" || return 0
             else
                 warn "  ❌ 无效: $choice"
-                read -r -p "    按回车返回菜单" _ || break
+                wait_for_menu "    按回车返回菜单，q 退出" || return 0
             fi
         else
             warn "  ❌ 无效: $choice"
-            read -r -p "    按回车返回菜单" _ || break
+            wait_for_menu "    按回车返回菜单，q 退出" || return 0
         fi
     done
 }

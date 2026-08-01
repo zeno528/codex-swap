@@ -34,6 +34,8 @@ grep -q '已切换至 deepseek' <<< "$output"
 grep -q 'trusted_project = "test-project"' "$CODEX_HOME/model-states/gpt.toml"
 cmp "$test_root/deepseek-before.toml" "$CODEX_HOME/config.toml"
 test "$(find "$CODEX_HOME/backups_model" -name '*.toml' | wc -l)" -ge 2
+output="$(printf '1\nq\nq\n' | bash linux/codex-switch 2>&1)"
+test "$(grep -o '模型切换' <<< "$output" | wc -l)" -eq 1
 
 fake_bin="$test_root/bin"
 mkdir -p "$fake_bin"
