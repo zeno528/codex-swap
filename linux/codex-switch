@@ -9,7 +9,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.35"
+VERSION="0.2.36"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"

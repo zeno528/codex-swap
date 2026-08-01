@@ -13,7 +13,7 @@ REPO_NAME="codex-switch"
 ASSET_NAME="codex-switch-linux.zip"
 BIN_DIR="$HOME/.local/bin"
 LAUNCHER="$BIN_DIR/codex-switch"
-SHORTCUT="$BIN_DIR/cxs"
+SHORTCUT="$BIN_DIR/sw"
 
 say()  { printf '\033[32m  %s\033[0m\n' "$1"; }
 warn() { printf '\033[33m  %s\033[0m\n' "$1"; }
@@ -25,6 +25,9 @@ if [ "${1:-}" = "--uninstall" ]; then
     rm -f "$LAUNCHER" && say "已删除启动器 $LAUNCHER" || true
     if [ -L "$SHORTCUT" ] && [ "$(readlink "$SHORTCUT")" = "codex-switch" ]; then
         rm -f "$SHORTCUT" && say "已删除快捷命令 $SHORTCUT"
+    fi
+    if [ -L "$BIN_DIR/cxs" ] && [ "$(readlink "$BIN_DIR/cxs")" = "codex-switch" ]; then
+        rm -f "$BIN_DIR/cxs" && say "已删除旧快捷命令 $BIN_DIR/cxs"
     fi
     echo "  数据目录 ~/.codex 未动（models/model-states 完好）"
     exit 0
@@ -95,7 +98,7 @@ esac
 # ---------- 汇总 ----------
 printf '\n\033[32m✅ codex-switch %s 安装完成\033[0m\n' "$TAG"
 echo "   程序: $LAUNCHER"
-echo "   快捷: cxs"
+echo "   快捷: sw"
 echo "   数据目录: $HOME/.codex（未改动）"
-echo "   使用: 新终端里运行 codex-switch"
+echo "   使用: 新终端里运行 sw（或 codex-switch）"
 echo "   升级: codex-switch update"

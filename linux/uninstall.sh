@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # codex-switch 卸载器 (Linux/WSL2 独立分支)
-# 仅删除 ~/.local/bin/codex-switch 及其 cxs 快捷命令，数据目录 ~/.codex 不受影响
+# 仅删除 ~/.local/bin/codex-switch 及其 sw 快捷命令，数据目录 ~/.codex 不受影响
 set -euo pipefail
 
 LAUNCHER="$HOME/.local/bin/codex-switch"
-SHORTCUT="$HOME/.local/bin/cxs"
+SHORTCUT="$HOME/.local/bin/sw"
+OLD_SHORTCUT="$HOME/.local/bin/cxs"
 
 shortcut_is_ours() {
     [ -L "$SHORTCUT" ] && [ "$(readlink "$SHORTCUT")" = "codex-switch" ]
@@ -23,6 +24,10 @@ case "$ans" in
         if shortcut_is_ours; then
             rm -f "$SHORTCUT"
             printf '\033[32m✅ 已删除快捷命令 %s\033[0m\n' "$SHORTCUT"
+        fi
+        if [ -L "$OLD_SHORTCUT" ] && [ "$(readlink "$OLD_SHORTCUT")" = "codex-switch" ]; then
+            rm -f "$OLD_SHORTCUT"
+            printf '\033[32m✅ 已删除旧快捷命令 %s\033[0m\n' "$OLD_SHORTCUT"
         fi
         echo "  数据目录 ~/.codex 未动（models/model-states 完好）"
         ;;
