@@ -9,7 +9,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.24"
+VERSION="0.2.25"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -211,6 +211,32 @@ fmt_name() {
         deepseek*) printf "🐳 %s" "$name" ;;
         *)         printf "%s" "$name" ;;
     esac
+}
+
+# === 工具：掩码输入（逐字符显示 •，支持退格，回车结束） ===
+# 结果写入全局 SECRET_INPUT（read 必须在父 shell 执行，命令替换会吞 stdin 缓冲）
+SECRET_INPUT=""
+read_secret() {
+    local prompt="$1" input="" ch
+    printf "%s" "$prompt"
+    while IFS= read -r -s -n1 ch; do
+        case "$ch" in
+            $'\x7f'|$'\b')
+                [ -n "$input" ] || continue
+                input="${input%?}"
+                printf '\b \b'
+                ;;
+            $'\n'|$'\r'|'')
+                break
+                ;;
+            *)
+                input+="$ch"
+                printf '•'
+                ;;
+        esac
+    done
+    printf '\n'
+    SECRET_INPUT="$input"
 }
 
 table_row() {
@@ -647,8 +673,8 @@ wizard_builtin_template() {
 
     printf "\n  ${CYAN}🔑 DeepSeek API Key${C}\n"
     printf "  ${DGRAY}在 platform.deepseek.com/api_keys 创建，可留空稍后手动填入模板${C}\n"
-    read -r -s -p "  API Key › " key || { printf "\n"; return 1; }
-    printf "\n"
+    read_secret "  API Key › "
+    key="$SECRET_INPUT"
 
     mkdir -p "$MODELS_DIR"
     wizard_write_template "$name" "$content" "$key"
