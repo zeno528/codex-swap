@@ -21,6 +21,7 @@ CONFIG="$CODEX_HOME/config.toml"
 MODELS_DIR="$CODEX_HOME/models"
 STATE_DIR="$CODEX_HOME/model-states"
 BACKUP_DIR="$CODEX_HOME/backups_model"
+UPDATED=false
 
 C='\033[0m' RED='\033[31m' GREEN='\033[32m' YELLOW='\033[33m' CYAN='\033[38;2;63;174;194m' BOLD_CYAN='\033[1;38;2;63;174;194m' DGRAY='\033[90m'
 
@@ -274,10 +275,11 @@ cmd_use() {
         [[ "$line" == \[* ]] && break
         echo "  $(mask_line "$line")"
     done < "$CONFIG"
-    printf "${DGRAY}\n  ℹ️  重启 Codex App 后生效${C}\n"
+    printf "${DGRAY}\n  ℹ️  重启 Codex 后生效${C}\n"
 }
 
 cmd_update() {
+    UPDATED=false
     printf "${DGRAY}  🔎 检查更新 · 当前 v%s${C}\n" "$VERSION"
     local json url source_version
     source_version=$(curl -fsSL "$VERSION_URL" | tr -d '[:space:]') || fail "无法获取 VERSION（网络或 GitHub 限流）"
@@ -307,6 +309,7 @@ cmd_update() {
     cp "$new" "$self.tmp"
     chmod +x "$self.tmp"
     mv "$self.tmp" "$self"
+    UPDATED=true
     printf "${GREEN}  ✅ 已升级至 v%s${C}\n" "$source_version"
 }
 
@@ -350,7 +353,15 @@ cmd_menu() {
             q|Q) return ;;
             "") continue ;;
             o|O) xdg-open "$MODELS_DIR" >/dev/null 2>&1 || echo "  手动打开: $MODELS_DIR"; continue ;;
-            u|U) cmd_update; read -r -p "    按回车返回菜单" _ || break; continue ;;
+            u|U)
+                cmd_update
+                if [ "$UPDATED" = true ]; then
+                    read -r -p "    按回车重新加载菜单" _ || break
+                    exec bash "$(readlink -f "$0")"
+                fi
+                read -r -p "    按回车返回菜单" _ || break
+                continue
+                ;;
         esac
         if [[ "$choice" =~ ^[0-9]+$ ]]; then
             local name

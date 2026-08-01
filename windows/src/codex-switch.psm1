@@ -458,7 +458,7 @@ function Invoke-Use {
         }
         Write-ColorOutput "   $t" White
     }
-    Write-ColorOutput "⚠️  请重启 Codex App 生效" Yellow
+    Write-ColorOutput "⚠️  请重启 Codex 生效" Yellow
 }
 
 # === 交互式菜单 ===
