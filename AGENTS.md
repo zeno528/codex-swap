@@ -31,6 +31,8 @@ legacy/               v1 冻结代码，只读不维护
 
 发版流程：改版本 → 跑全量测试 → commit → `git tag vX.Y.Z && git push origin vX.Y.Z`（release workflow 自动构建双 zip + 创建 Release）。
 
+**pre-commit hook（`.githooks/pre-commit`，`core.hooksPath` 已指向 `.githooks`）**：每次提交自动递增 patch 并同步前 3 处版本文件（如 0.2.1 → 0.2.2）；patch/minor 到 99 进一位（0.0.99 → 0.1.0）。发版升 minor/major 时手动改版本号，hook 检测到工作区版本 ≠ HEAD 会跳过不重复递增；git tag 仍只在发版时手动打。
+
 ## 开发规范（Windows 分支）
 
 - 纯函数与命令分离：可测试的纯函数导出到 manifest `FunctionsToExport`，UI/IO 命令留在模块内

@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# pre-commit: 提交时自动递增版本号（patch，99 进位）并同步三处版本文件
+# 版本主源: linux/codex-switch 的 VERSION；tag 不发版时不打
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+VFILE="$ROOT/linux/codex-switch"
+PSM1="$ROOT/windows/src/codex-switch.psm1"
+PSD1="$ROOT/windows/src/codex-switch.psd1"
+
+# 三处文件缺失时跳过（避免破坏不完整检出）
+for f in "$VFILE" "$PSM1" "$PSD1"; do
+    [ -f "$f" ] || { echo "pre-commit: 跳过版本递增（缺 $f）"; exit 0; }
+done
+
+bump() {
+    IFS='.' read -r major minor patch <<< "$1"
+    patch=$((patch + 1))
+    if [ "$patch" -gt 99 ]; then
+        patch=0
+        minor=$((minor + 1))
+        if [ "$minor" -gt 99 ]; then
+            minor=0
+            major=$((major + 1))
+        fi
+    fi
+    echo "$major.$minor.$patch"
+}
+
+cur=$(grep '^VERSION=' "$VFILE" | head -1 | cut -d'"' -f2)
+head_ver=$(git show HEAD:"${VFILE#$ROOT/}" 2>/dev/null | grep '^VERSION=' | head -1 | cut -d'"' -f2 || true)
+
+# 幂等：工作区版本已与 HEAD 不同（手动发版或上次已递增）则不重复递增
+if [ -n "$head_ver" ] && [ "$cur" != "$head_ver" ]; then
+    echo "pre-commit: 版本号已由工作区改动（$head_ver → $cur），跳过递增"
+    exit 0
+fi
+
+new=$(bump "$cur")
+sed -i "s/^VERSION=\"[0-9.]*\"/VERSION=\"$new\"/" "$VFILE"
+sed -i "s/\$script:ScriptVersion = '[0-9.]*'/\$script:ScriptVersion = '$new'/" "$PSM1"
+sed -i "s/^    ModuleVersion     = '[0-9.]*'/    ModuleVersion     = '$new'/" "$PSD1"
+
+git add "$VFILE" "$PSM1" "$PSD1"
+echo "pre-commit: 版本号 $cur → $new（三处已同步）"
