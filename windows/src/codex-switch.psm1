@@ -7,6 +7,7 @@ $script:ScriptVersion = '@VERSION@'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-switch'
 $script:ReleaseAsset   = 'codex-switch-windows.zip'
+$script:VersionUrl     = "https://raw.githubusercontent.com/$($script:RepoOwner)/$($script:RepoName)/main/VERSION"
 
 function Get-CodexHome {
     return Join-Path $env:USERPROFILE '.codex'
@@ -649,7 +650,17 @@ function Compare-Version {
     return 0
 }
 
-# === 自更新：本地版本 vs GitHub 最新 Release ===
+# === 自更新：VERSION 是唯一版本源，Release 仅提供下载资产 ===
+function Get-SourceVersion {
+    try {
+        $version = ([string](Invoke-RestMethod -Uri $script:VersionUrl -Headers @{ 'User-Agent' = 'codex-switch' } -TimeoutSec 15)).Trim()
+        if ($version -notmatch '^\d+\.\d+\.\d+$') { return $null }
+        return $version
+    } catch {
+        return $null
+    }
+}
+
 function Get-LatestReleaseInfo {
     try {
         $uri = "https://api.github.com/repos/$($script:RepoOwner)/$($script:RepoName)/releases/latest"
@@ -661,21 +672,24 @@ function Get-LatestReleaseInfo {
 
 function Invoke-Update {
     Write-ColorOutput "🔎 检查更新 (v$($script:ScriptVersion))..." DarkGray
-    $info = Get-LatestReleaseInfo
-    if ($null -eq $info) {
-        throw '无法获取最新版本（网络问题或 GitHub API 限流）'
+    $sourceVersion = Get-SourceVersion
+    if ([string]::IsNullOrWhiteSpace($sourceVersion)) {
+        throw '无法获取有效 VERSION（网络问题或 GitHub 限流）'
     }
-    $latest = $info.tag_name -replace '^v', ''
-    $cmp = Compare-Version -A $latest -B $script:ScriptVersion
+    $cmp = Compare-Version -A $sourceVersion -B $script:ScriptVersion
     if ($cmp -le 0) {
         Write-ColorOutput "✅ 已是最新版本 v$($script:ScriptVersion)" Green
         return
     }
-    Write-ColorOutput "发现新版本: v$latest（当前 v$($script:ScriptVersion)）" Yellow
+    Write-ColorOutput "发现新版本: v$sourceVersion（当前 v$($script:ScriptVersion)）" Yellow
 
+    $info = Get-LatestReleaseInfo
+    if ($null -eq $info) {
+        throw '无法获取最新版本（网络问题或 GitHub API 限流）'
+    }
     $asset = $info.assets | Where-Object { $_.name -eq $script:ReleaseAsset } | Select-Object -First 1
     if ($null -eq $asset) {
-        throw "Release v$latest 缺少资产 $($script:ReleaseAsset)"
+        throw "找不到资产 $($script:ReleaseAsset)"
     }
 
     # 定位安装根目录（src 的上级）
@@ -699,6 +713,11 @@ function Invoke-Update {
             -not [System.IO.File]::Exists((Join-Path $extract 'bin\codex-switch.cmd'))) {
             throw "下载包结构不完整（缺 src/codex-switch.psm1 或 bin/codex-switch.cmd）"
         }
+        $packageModule = [System.IO.File]::ReadAllText((Join-Path $extract 'src\codex-switch.psm1'), [System.Text.UTF8Encoding]::new($false))
+        $packageVersion = [regex]::Match($packageModule, '(?m)^\$script:ScriptVersion\s*=\s*''([^'']+)''').Groups[1].Value
+        if ($packageVersion -ne $sourceVersion) {
+            throw "下载资产版本 v$packageVersion 与 VERSION v$sourceVersion 不一致"
+        }
 
         # 备份当前安装 → 替换 → 验证 → 清理
         $old = "$root.old"
@@ -708,7 +727,7 @@ function Invoke-Update {
         try {
             Copy-Item (Join-Path $extract '*') $root -Recurse -Force
             Import-Module (Join-Path $root 'src\codex-switch.psm1') -Force -ErrorAction Stop
-            Write-ColorOutput "✅ 已升级到 v$latest" Green
+            Write-ColorOutput "✅ 已升级到 v$sourceVersion" Green
             Remove-Item $old -Recurse -Force
         } catch {
             # 回滚

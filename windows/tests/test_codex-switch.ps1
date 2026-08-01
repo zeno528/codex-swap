@@ -130,6 +130,11 @@ Assert-True ((Get-DisplayWidth 'a中b') -eq 4) '混合宽度'
 Write-Host "`n=== Test 9: Get-CodexHome ===" -ForegroundColor Cyan
 Assert-True ((Get-CodexHome).EndsWith('.codex')) '返回以 .codex 结尾'
 
+Write-Host "`n=== Test 10: 更新以 VERSION 为准 ===" -ForegroundColor Cyan
+$moduleText = [System.IO.File]::ReadAllText($modulePath, [System.Text.UTF8Encoding]::new($false))
+Assert-True ($moduleText -match 'Get-SourceVersion' -and $moduleText -notmatch 'sourceVsRelease') '更新决策只比较 VERSION 与本机版本'
+Assert-True ($moduleText -match '下载资产版本 v\$packageVersion 与 VERSION v\$sourceVersion 不一致') '下载资产必须校验 VERSION'
+
 Write-Host "`n=== 总结 ===" -ForegroundColor Cyan
 Write-Host "通过: $pass" -ForegroundColor Green
 Write-Host "失败: $fail" -ForegroundColor $(if ($fail -eq 0) { 'Green' } else { 'Red' })

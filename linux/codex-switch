@@ -14,6 +14,7 @@ REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 ASSET_NAME="codex-switch-linux.zip"
 API_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
+VERSION_URL="https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/VERSION"
 
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 CONFIG="$CODEX_HOME/config.toml"
@@ -173,6 +174,7 @@ table_cell() {
 
 table_row() {
     local num="$1" status="$2" name="$3" model="$4" provider="$5" color="$6"
+    printf '  '
     table_cell "$num" 4 "$color"
     table_cell "$status" 6 "$color"
     table_cell "$name" 14 "$color"
@@ -276,17 +278,16 @@ cmd_use() {
 
 cmd_update() {
     echo "  🔎 检查更新 (v$VERSION)..."
-    local json tag url
-    json=$(curl -fsSL -H 'User-Agent: codex-switch' "$API_URL") || fail "无法获取最新版本（网络或 GitHub 限流）"
-    tag=$(printf '%s' "$json" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
-    tag="${tag#v}"
-    [ -n "$tag" ] || fail "解析 Release 失败"
-    if ! ver_gt "$tag" "$VERSION"; then
+    local json url source_version
+    source_version=$(curl -fsSL "$VERSION_URL" | tr -d '[:space:]') || fail "无法获取 VERSION（网络或 GitHub 限流）"
+    [[ "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "VERSION 格式无效: $source_version"
+    if ! ver_gt "$source_version" "$VERSION"; then
         say "✅ 已是最新版本 v$VERSION"; return
     fi
-    warn "发现新版本: v$tag（当前 v$VERSION）"
-    url=$(printf '%s' "$json" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*codex-switch-linux\.zip"' | head -n1 | sed 's/.*"\(http[^"]*\)".*/\1/')
-    [ -n "$url" ] || fail "Release v$tag 缺少资产 $ASSET_NAME"
+    warn "发现新版本: v$source_version（当前 v$VERSION）"
+    json=$(curl -fsSL -H 'User-Agent: codex-switch' "$API_URL") || fail "无法获取最新版本（网络或 GitHub 限流）"
+    url=$(printf '%s' "$json" | { grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*codex-switch-linux\.zip"' || true; } | head -n1 | sed 's/.*"\(http[^"]*\)".*/\1/')
+    [ -n "$url" ] || fail "找不到资产 $ASSET_NAME"
 
     local tmp; tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' RETURN
@@ -295,13 +296,16 @@ cmd_update() {
     local new="$tmp/x/codex-switch"
     [ -f "$new" ] || fail "包内缺少 codex-switch"
     bash -n "$new" || fail "新版本语法校验失败"
+    local package_version
+    package_version=$(sed -n 's/^VERSION="\([^"]*\)".*/\1/p' "$new")
+    [ "$package_version" = "$source_version" ] || fail "下载资产版本 v$package_version 与 VERSION v$source_version 不一致"
 
     local self
     self="$(readlink -f "$0")"
     cp "$new" "$self.tmp"
     chmod +x "$self.tmp"
     mv "$self.tmp" "$self"
-    say "✅ 已升级到 v$tag"
+    say "✅ 已升级到 v$source_version"
 }
 
 cmd_doctor() {

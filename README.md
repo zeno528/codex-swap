@@ -50,7 +50,7 @@ cxs                             # 快捷启动（等同 codex-switch）
 codex-switch use deepseek       # 切换模型（恢复该模型最新状态 / 首次模板播种）
 codex-switch list               # 列出模板及激活状态
 codex-switch current            # 查看当前生效配置
-codex-switch update             # 自更新（比对 GitHub 最新 Release）
+codex-switch update             # 自更新（以根目录 VERSION 核验 Release 后升级）
 codex-switch doctor             # 体检（目录/模板/状态/依赖检查）
 ```
 

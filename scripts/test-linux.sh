@@ -33,4 +33,21 @@ grep -q 'trusted_project = "test-project"' "$CODEX_HOME/model-states/gpt.toml"
 cmp "$test_root/deepseek-before.toml" "$CODEX_HOME/config.toml"
 test "$(find "$CODEX_HOME/backups_model" -name '*.toml' | wc -l)" -ge 2
 
+fake_bin="$test_root/bin"
+mkdir -p "$fake_bin"
+cat > "$fake_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+    *'/VERSION') printf '0.2.3\n' ;;
+    *'/releases/latest') printf '%s\n' '{"tag_name":"v0.2.0"}' ;;
+    *) exit 1 ;;
+esac
+EOF
+chmod +x "$fake_bin/curl"
+sed 's/@VERSION@/0.2.2/' linux/codex-switch > "$test_root/codex-switch"
+if output="$(PATH="$fake_bin:$PATH" bash "$test_root/codex-switch" update 2>&1)"; then
+    exit 1
+fi
+grep -q '找不到资产 codex-switch-linux.zip' <<< "$output"
+
 echo 'Linux 端到端切换测试通过'
