@@ -15,6 +15,7 @@ cp "$CODEX_HOME/config.toml" "$test_root/deepseek-before.toml"
 
 output="$(bash linux/codex-switch list)"
 grep -q deepseek <<< "$output"
+grep -q '编号' <<< "$output"
 output="$(bash linux/codex-switch current)"
 grep -q deepseek-v4-flash <<< "$output"
 output="$(bash linux/codex-switch doctor)"

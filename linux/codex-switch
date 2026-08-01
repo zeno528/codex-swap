@@ -117,27 +117,105 @@ cmd_current() {
     done < "$CONFIG"
 }
 
+repeat_char() {
+    local text
+    printf -v text '%*s' "$2" ''
+    printf '%s' "${text// /$1}"
+}
+
+display_width() {
+    local value="$1" char code i width=0
+    for ((i = 0; i < ${#value}; i++)); do
+        char="${value:i:1}"
+        printf -v code '%d' "'$char"
+        if (( (code >= 0x1100 && code <= 0x115f) ||
+              (code >= 0x2e80 && code <= 0xa4cf) ||
+              (code >= 0xac00 && code <= 0xd7a3) ||
+              (code >= 0xf900 && code <= 0xfaff) ||
+              (code >= 0xfe30 && code <= 0xfe6f) ||
+              (code >= 0xff01 && code <= 0xff60) ||
+              (code >= 0xffe0 && code <= 0xffe6) ||
+              (code >= 0x1f000) )); then
+            width=$((width + 2))
+        else
+            width=$((width + 1))
+        fi
+    done
+    printf '%s' "$width"
+}
+
+table_rule() {
+    local left="$1" join="$2" right="$3" width first=true
+    shift 3
+    printf '  %s' "$left"
+    for width in "$@"; do
+        [ "$first" = true ] || printf '%s' "$join"
+        repeat_char '─' "$width"
+        first=false
+    done
+    printf '%s\n' "$right"
+}
+
+table_cell() {
+    local value="$1" width="$2" color="$3" value_width
+    value_width=$(display_width "$value")
+    if [ "$value_width" -gt "$width" ]; then
+        local limit=$((width - 3))
+        while [ "$(display_width "$value")" -gt "$limit" ]; do
+            value="${value:0:${#value}-1}"
+        done
+        value+='...'
+        value_width=$(display_width "$value")
+    fi
+    printf "${DGRAY}│${C}${color}%s${C}" "$value"
+    printf '%*s' "$((width - value_width))" ''
+}
+
+table_row() {
+    local num="$1" status="$2" name="$3" model="$4" provider="$5" color="$6"
+    table_cell "$num" 4 "$color"
+    table_cell "$status" 6 "$color"
+    table_cell "$name" 14 "$color"
+    table_cell "$model" 26 "$color"
+    table_cell "$provider" 14 "$color"
+    printf "${DGRAY}│${C}\n"
+}
+
 cmd_list() {
     mkdir -p "$MODELS_DIR"
     local files=("$MODELS_DIR"/*.toml)
-    [ -f "${files[0]:-}" ] || { warn "❓ 模板目录为空: $MODELS_DIR"; echo ""; return; }
+    [ -f "${files[0]:-}" ] || {
+        warn "  ❓ 模板目录为空: $MODELS_DIR"
+        printf "${DGRAY}     手动新建 .toml 模板文件后回车刷新${C}\n\n"
+        return
+    }
 
     local cur_model cur_provider
     cur_model=$(get_field "$CONFIG" model)
     cur_provider=$(get_field "$CONFIG" model_provider)
 
-    local i=0 f name model provider mark
+    printf "${CYAN}  🔍 可用模型模板${C}\n"
+    table_rule '╭' '┬' '╮' 4 6 14 26 14
+    table_row '编号' '状态' '名称' '模型' '提供方' "$CYAN"
+    table_rule '├' '┼' '┤' 4 6 14 26 14
+
+    local i=0 f name model provider status color
     for f in "$MODELS_DIR"/*.toml; do
         [ -f "$f" ] || continue
         i=$((i+1))
         name=$(basename "$f" .toml)
         model=$(get_field "$f" model)
         provider=$(get_field "$f" model_provider)
-        mark="  "
-        [ "$model" = "$cur_model" ] && [ "$provider" = "$cur_provider" ] && mark="✅"
-        printf "${DGRAY}%s${C} %-2d  %-16s %-28s %s\n" "$mark" "$i" "$name" "${model:--}" "${provider:--}"
+        status=''
+        color="$C"
+        if [ "$model" = "$cur_model" ] && [ "$provider" = "$cur_provider" ]; then
+            status='●'
+            color="$GREEN"
+        fi
+        table_row "$i" "$status" "$name" "${model:--}" "${provider:--}" "$color"
     done
-    echo "  ✅ 激活中"
+    table_rule '╰' '┴' '╯' 4 6 14 26 14
+    printf "${DGRAY}  ● 当前激活${C}\n"
 }
 
 cmd_use() {
@@ -252,11 +330,17 @@ show_help() {
 cmd_menu() {
     while true; do
         clear
-        printf "${CYAN}  ╭── codex-switch v%s 模型切换 ──╮${C}\n" "$VERSION"
-        echo "     选数字切模型，u 升级，q 退出，o 打开模板目录"
+        printf "${CYAN}  💻 codex-switch v%s · 模型切换${C}\n" "$VERSION"
+        printf "${DGRAY}  选择编号切换模型；u 更新，o 打开模板目录，回车刷新，q 退出${C}\n"
         echo ""
         cmd_list
-        read -r -p "  选择: " choice || break
+        local files=("$MODELS_DIR"/*.toml) prompt
+        if [ -f "${files[0]:-}" ]; then
+            prompt="  选择 (1-${#files[@]})，u 更新，o 打开目录，q 退出: "
+        else
+            prompt="  u 更新，o 打开目录，回车刷新，q 退出: "
+        fi
+        read -r -p "$prompt" choice || break
         case "$choice" in
             q|Q) return ;;
             "") continue ;;
@@ -264,7 +348,7 @@ cmd_menu() {
             u|U) cmd_update; read -r -p "    按回车返回菜单" _ || break; continue ;;
         esac
         if [[ "$choice" =~ ^[0-9]+$ ]]; then
-            local files=("$MODELS_DIR"/*.toml) name
+            local name
             if [ -f "${files[0]:-}" ] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#files[@]}" ]; then
                 name=$(basename "${files[$((choice-1))]}" .toml)
                 cmd_use "$name" || true

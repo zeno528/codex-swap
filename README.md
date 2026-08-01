@@ -1,5 +1,7 @@
 # codex-switch
 
+![版本](https://img.shields.io/github/v/tag/zeno528/codex-switch?label=版本&color=blue)
+
 切换 Codex 模型配置的命令行工具。**模板播种 + 状态恢复**：每个模型独立维护自己最新的完整配置，来回切换不丢使用记录、互不污染。
 
 支持两个独立分支，互不依赖：
