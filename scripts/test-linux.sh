@@ -48,7 +48,7 @@ case "$*" in
 esac
 EOF
 chmod +x "$fake_bin/curl"
-sed 's/@VERSION@/0.2.2/' linux/codex-switch > "$test_root/codex-switch"
+sed 's/^VERSION="[^"]*"/VERSION="0.2.2"/' linux/codex-switch > "$test_root/codex-switch"
 if output="$(PATH="$fake_bin:$PATH" bash "$test_root/codex-switch" update 2>&1)"; then
     exit 1
 fi
