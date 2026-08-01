@@ -9,7 +9,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.16"
+VERSION="0.2.17"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -303,7 +303,6 @@ cmd_update() {
     [ -n "$url" ] || fail "找不到资产 $ASSET_NAME"
 
     local tmp; tmp=$(mktemp -d)
-    trap 'rm -rf "$tmp"' RETURN
     printf "${DGRAY}  ⬇️ 正在下载更新${C}\n"
     curl -fsSL -o "$tmp/$ASSET_NAME" "$url" || fail "下载失败"
     unzip -qo "$tmp/$ASSET_NAME" -d "$tmp/x" || fail "解压失败"
@@ -319,6 +318,7 @@ cmd_update() {
     cp "$new" "$self.tmp"
     chmod +x "$self.tmp"
     mv "$self.tmp" "$self"
+    rm -rf "$tmp"
     UPDATED=true
     printf "${GREEN}  ✅ 已升级至 v%s${C}\n" "$source_version"
 }
