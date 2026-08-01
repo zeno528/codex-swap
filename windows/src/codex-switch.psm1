@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.36'
+$script:ScriptVersion = '0.2.37'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-switch'
 $script:ReleaseAsset   = 'codex-switch-windows.zip'
@@ -136,50 +136,23 @@ function Get-CurrentFingerprint {
     return @{ Model = $m; Provider = $p; TokenFingerprint = $fp }
 }
 
-# === 核心：两阶段判断 — 给定模板列表 + 当前 config，标记每个模板是 active/backup/none ===
-# 阶段 1: model + model_provider 匹配 (只比 model/provider 字段，不管密钥)
-# 阶段 2: 阶段 1 命中多个时，按 token 指纹 (前6|后6) 进一步精筛
-# 返回: 路径 -> 'active' | 'backup' | 'none'
+# === 核心：标记每个模板是 active/none（与 Linux 分支一致：model+provider 匹配即激活） ===
+# 返回: 路径 -> 'active' | 'none'
 function Resolve-ActiveMarkers {
     param(
         [Parameter(Mandatory)] [string[]]$Files,
         [Parameter(Mandatory)] [string]$ConfigPath
     )
     $current = Get-CurrentFingerprint -ConfigPath $ConfigPath
-    $stage1Hits = [System.Collections.Generic.List[string]]::new()
     $markers = @{}
     foreach ($f in $Files) {
         $fp = Get-TemplateFingerprint -Path $f
-        if ($fp.Model -eq $current.Model -and $fp.Provider -eq $current.Provider -and $null -ne $fp.Model) {
-            $stage1Hits.Add($f)
-            $markers[$f] = 'pending'
+        if ($null -ne $fp.Model -and $fp.Model -eq $current.Model -and $fp.Provider -eq $current.Provider) {
+            $markers[$f] = 'active'
         } else {
             $markers[$f] = 'none'
         }
     }
-    if ($stage1Hits.Count -eq 1) {
-        $markers[$stage1Hits[0]] = 'active'
-        return $markers
-    }
-    if ($stage1Hits.Count -ge 2 -and $null -ne $current.TokenFingerprint) {
-        $matched = $false
-        foreach ($f in $stage1Hits) {
-            $fp = Get-TemplateFingerprint -Path $f
-            if ($fp.TokenFingerprint -eq $current.TokenFingerprint) {
-                $markers[$f] = 'active'
-                $matched = $true
-            } else {
-                $markers[$f] = 'backup'
-            }
-        }
-        # 极端兜底: 阶段 2 没匹配出（不该发生，但脚本不能崩）
-        if (-not $matched) {
-            foreach ($f in $stage1Hits) { $markers[$f] = 'backup' }
-        }
-        return $markers
-    }
-    # 阶段 1 命中 >= 2 但 config 无 token 指纹可比 — 按"无法识别"处理，全部标 backup
-    foreach ($f in $stage1Hits) { $markers[$f] = 'backup' }
     return $markers
 }
 
@@ -543,7 +516,6 @@ function Invoke-List {
         }
         $marker = switch ($markers[$files[$i]]) {
             'active' { '✅' }
-            'backup' { '🔑' }
             default  { ''  }
         }
         $rows.Add(@{
@@ -555,28 +527,16 @@ function Invoke-List {
         })
     }
 
-    # ── 表格渲染 (CJK/emoji 安全, 自适应列宽) ──
-    $headers = @('编号', '状态', 'NAME', 'MODEL', 'PROVIDER')
+    # ── 表格渲染（与 Linux 分支一致：固定列宽、编号/状态居中、激活行粗体绿）──
+    $headers = @('编号', '状态', '名称', '模型', '供应商')
     $keys    = @('Num',  'Status', 'Name', 'Model', 'Provider')
-
-    # 最小列宽 (给表头一点呼吸空间)
-    $minWidths = @(6, 7, 20, 20, 24)
+    $widths  = @(4, 6, 16, 26, 14)
     $colCount = $headers.Count
-    $widths = @()
-    # 预计算每列所有值的显示宽度，避免在算式里反复调用函数
-    $colWidths = for ($c = 0; $c -lt $colCount; $c++) {
-        $list = [System.Collections.Generic.List[int]]::new()
-        $list.Add((Get-DisplayWidth $headers[$c]))
-        foreach ($r in $rows) {
-            $list.Add((Get-DisplayWidth ([string]$r[$keys[$c]])))
-        }
-        ,$list.ToArray()
-    }
-    for ($c = 0; $c -lt $colCount; $c++) {
-        $w = $minWidths[$c]
-        foreach ($vw in $colWidths[$c]) { if ($vw -gt $w) { $w = $vw } }
-        $widths += $w
-    }
+    $esc = [char]27
+    $gray     = "$esc[90m"
+    $reset    = "$esc[0m"
+    $boldCyan = "$esc[1;38;2;63;174;194m"
+    $boldGreen = "$esc[1;32m"
 
     # 水平线: ┌─┬─┐ ├─┼─┤ └─┴─┘
     function _HLine($L, $J, $R) {
@@ -587,64 +547,57 @@ function Invoke-List {
         }
         return $line + $R
     }
-    # 数据行: 边框灰, 内容按 $Color 染色
-    function Write-DataRow($Values, $Color, $Bold) {
-        if ($Bold) { Write-Host "$([char]27)[1m" -NoNewline }
-        Write-Host '│' -NoNewline -ForegroundColor DarkGray
+    # 数据行: 边框灰, 激活行内容粗体绿/普通行无色（与 Linux 一致）
+    function Write-DataRow($Values, $Bold) {
+        $valColor = if ($Bold) { $boldGreen } else { '' }
+        $sb = "$gray│$valColor"
         for ($i = 0; $i -lt $colCount; $i++) {
             $val = [string]$Values[$i]
             $pad = $widths[$i] - (Get-DisplayWidth $val)
             if ($pad -lt 0) { $pad = 0 }
             if ($i -eq 0 -or $i -eq 1) {
                 $leftPad  = [int][Math]::Floor($pad / 2)
-                if ($i -eq 1) { $leftPad += 1 }
                 $rightPad = $pad - $leftPad
                 if ($rightPad -lt 0) { $rightPad = 0 }
-                Write-Host (' ' * $leftPad) -NoNewline -ForegroundColor DarkGray
-                Write-Host $val -NoNewline -ForegroundColor $Color
-                Write-Host (' ' * $rightPad + '│') -NoNewline -ForegroundColor DarkGray
+                $sb += ' ' * $leftPad + $val + ' ' * $rightPad
             } else {
-                Write-Host $val -NoNewline -ForegroundColor $Color
-                Write-Host (' ' * $pad + '│') -NoNewline -ForegroundColor DarkGray
+                $sb += $val + ' ' * $pad
             }
+            if ($i -lt $colCount - 1) { $sb += "$reset$gray│$valColor" }
         }
-        if ($Bold) { Write-Host "$([char]27)[0m" -NoNewline }
-        Write-Host ''
+        $sb += "$reset$gray│$reset"
+        Write-Host $sb
     }
-    # 表头: 边框灰, 内容青
-    function Write-HeadRow($Values, $Color) {
-        Write-Host '│' -NoNewline -ForegroundColor DarkGray
+    # 表头: 边框灰, 内容粗体青（与 Linux 一致）
+    function Write-HeadRow($Values) {
+        $sb = "$gray│$boldCyan"
         for ($i = 0; $i -lt $colCount; $i++) {
             $val = [string]$Values[$i]
             $pad = $widths[$i] - (Get-DisplayWidth $val)
             if ($pad -lt 0) { $pad = 0 }
             if ($i -eq 0 -or $i -eq 1) {
                 $leftPad  = [int][Math]::Floor($pad / 2)
-                if ($i -eq 1) { $leftPad += 1 }
                 $rightPad = $pad - $leftPad
                 if ($rightPad -lt 0) { $rightPad = 0 }
-                Write-Host (' ' * $leftPad) -NoNewline -ForegroundColor DarkGray
-                Write-Host $val -NoNewline -ForegroundColor $Color
-                Write-Host (' ' * $rightPad + '│') -NoNewline -ForegroundColor DarkGray
+                $sb += ' ' * $leftPad + $val + ' ' * $rightPad
             } else {
-                Write-Host $val -NoNewline -ForegroundColor $Color
-                Write-Host (' ' * $pad + '│') -NoNewline -ForegroundColor DarkGray
+                $sb += $val + ' ' * $pad
             }
+            if ($i -lt $colCount - 1) { $sb += "$reset$gray│$boldCyan" }
         }
-        Write-Host ''
+        $sb += "$reset$gray│$reset"
+        Write-Host $sb
     }
 
-    Show-TitleBox '🔍 可用模型配置' Cyan
-    Write-Host (_HLine '╭' '┬' '╮') -ForegroundColor DarkGray
-    Write-HeadRow $headers Cyan
-    Write-Host (_HLine '├' '┼' '┤') -ForegroundColor DarkGray
+    Write-Host "  $boldCyan🔍 模型配置$reset"
+    Write-Host "$gray$(_HLine '╭' '┬' '╮')$reset"
+    Write-HeadRow $headers
+    Write-Host "$gray$(_HLine '├' '┼' '┤')$reset"
     foreach ($r in $rows) {
         $vals = @(); foreach ($k in $keys) { $vals += $r[$k] }
-        $color = if ($r.Status -eq '✅') { 'Green' } elseif ($r.Status -eq '🔑') { 'Yellow' } else { 'White' }
-        Write-DataRow $vals $color ($r.Status -eq '✅')
+        Write-DataRow $vals ($r.Status -eq '✅')
     }
-    Write-Host (_HLine '╰' '┴' '╯') -ForegroundColor DarkGray
-    Write-ColorOutput '✅ 激活中 🔑 备用密钥，同 model 不会被自动激活' DarkGray
+    Write-Host "$gray$(_HLine '╰' '┴' '╯')$reset"
 }
 
 # === 核心：切换 = 保存当前模型状态 + 恢复目标模型状态（首次用模板播种） ===
@@ -1007,7 +960,6 @@ function Invoke-Menu {
                 }
                 $marker = switch ($markers[$files[$i]]) {
                     'active' { '✅' }
-                    'backup' { '🔑' }
                     default  { ''  }
                 }
                 $rows.Add(@{
@@ -1019,26 +971,16 @@ function Invoke-Menu {
                 })
             }
 
-            # 自适应列宽 (CJK/emoji 安全)
-            $headers = @('编号', '状态', 'NAME', 'MODEL', 'PROVIDER')
+            # 表格渲染（与 Linux 分支一致：固定列宽、编号/状态居中、激活行粗体绿）
+            $headers = @('编号', '状态', '名称', '模型', '供应商')
             $keys    = @('Num',  'Status', 'Name', 'Model', 'Provider')
-            $minWidths = @(6, 7, 20, 20, 24)
+            $widths  = @(4, 6, 16, 26, 14)
             $colCount = $headers.Count
-            $widths = @()
-            # 预计算每列所有值的显示宽度，避免在算式里反复调用函数
-            $colWidths = for ($c = 0; $c -lt $colCount; $c++) {
-                $list = [System.Collections.Generic.List[int]]::new()
-                $list.Add((Get-DisplayWidth $headers[$c]))
-                foreach ($r in $rows) {
-                    $list.Add((Get-DisplayWidth ([string]$r[$keys[$c]])))
-                }
-                ,$list.ToArray()
-            }
-            for ($c = 0; $c -lt $colCount; $c++) {
-                $w = $minWidths[$c]
-                foreach ($vw in $colWidths[$c]) { if ($vw -gt $w) { $w = $vw } }
-                $widths += $w
-            }
+            $esc = [char]27
+            $gray     = "$esc[90m"
+            $reset    = "$esc[0m"
+            $boldCyan = "$esc[1;38;2;63;174;194m"
+            $boldGreen = "$esc[1;32m"
             function _HLine($L, $J, $R) {
                 $line = $L
                 for ($i = 0; $i -lt $colCount; $i++) {
@@ -1047,60 +989,53 @@ function Invoke-Menu {
                 }
                 return $line + $R
             }
-            function Write-DataRow($Values, $Color, $Bold) {
-                if ($Bold) { Write-Host "$([char]27)[1m" -NoNewline }
-                Write-Host '│' -NoNewline -ForegroundColor DarkGray
+            function Write-DataRow($Values, $Bold) {
+                $valColor = if ($Bold) { $boldGreen } else { '' }
+                $sb = "$gray│$valColor"
                 for ($i = 0; $i -lt $colCount; $i++) {
                     $val = [string]$Values[$i]
                     $pad = $widths[$i] - (Get-DisplayWidth $val)
                     if ($pad -lt 0) { $pad = 0 }
                     if ($i -eq 0 -or $i -eq 1) {
                         $leftPad  = [int][Math]::Floor($pad / 2)
-                        if ($i -eq 1) { $leftPad += 1 }
                         $rightPad = $pad - $leftPad
                         if ($rightPad -lt 0) { $rightPad = 0 }
-                        Write-Host (' ' * $leftPad) -NoNewline -ForegroundColor DarkGray
-                        Write-Host $val -NoNewline -ForegroundColor $Color
-                        Write-Host (' ' * $rightPad + '│') -NoNewline -ForegroundColor DarkGray
+                        $sb += ' ' * $leftPad + $val + ' ' * $rightPad
                     } else {
-                        Write-Host $val -NoNewline -ForegroundColor $Color
-                        Write-Host (' ' * $pad + '│') -NoNewline -ForegroundColor DarkGray
+                        $sb += $val + ' ' * $pad
                     }
+                    if ($i -lt $colCount - 1) { $sb += "$reset$gray│$valColor" }
                 }
-                if ($Bold) { Write-Host "$([char]27)[0m" -NoNewline }
-                Write-Host ''
+                $sb += "$reset$gray│$reset"
+                Write-Host $sb
             }
-            function Write-HeadRow($Values, $Color) {
-                Write-Host '│' -NoNewline -ForegroundColor DarkGray
+            function Write-HeadRow($Values) {
+                $sb = "$gray│$boldCyan"
                 for ($i = 0; $i -lt $colCount; $i++) {
                     $val = [string]$Values[$i]
                     $pad = $widths[$i] - (Get-DisplayWidth $val)
                     if ($pad -lt 0) { $pad = 0 }
                     if ($i -eq 0 -or $i -eq 1) {
                         $leftPad  = [int][Math]::Floor($pad / 2)
-                        if ($i -eq 1) { $leftPad += 1 }
                         $rightPad = $pad - $leftPad
                         if ($rightPad -lt 0) { $rightPad = 0 }
-                        Write-Host (' ' * $leftPad) -NoNewline -ForegroundColor DarkGray
-                        Write-Host $val -NoNewline -ForegroundColor $Color
-                        Write-Host (' ' * $rightPad + '│') -NoNewline -ForegroundColor DarkGray
+                        $sb += ' ' * $leftPad + $val + ' ' * $rightPad
                     } else {
-                        Write-Host $val -NoNewline -ForegroundColor $Color
-                        Write-Host (' ' * $pad + '│') -NoNewline -ForegroundColor DarkGray
+                        $sb += $val + ' ' * $pad
                     }
+                    if ($i -lt $colCount - 1) { $sb += "$reset$gray│$boldCyan" }
                 }
-                Write-Host ''
+                $sb += "$reset$gray│$reset"
+                Write-Host $sb
             }
-            Write-Host (_HLine '╭' '┬' '╮') -ForegroundColor DarkGray
-            Write-HeadRow $headers Cyan
-            Write-Host (_HLine '├' '┼' '┤') -ForegroundColor DarkGray
+            Write-Host "$gray$(_HLine '╭' '┬' '╮')$reset"
+            Write-HeadRow $headers
+            Write-Host "$gray$(_HLine '├' '┼' '┤')$reset"
             foreach ($r in $rows) {
                 $vals = @(); foreach ($k in $keys) { $vals += $r[$k] }
-                $color = if ($r.Status -eq '✅') { 'Green' } elseif ($r.Status -eq '🔑') { 'Yellow' } else { 'White' }
-                Write-DataRow $vals $color ($r.Status -eq '✅')
+                Write-DataRow $vals ($r.Status -eq '✅')
             }
-            Write-Host (_HLine '╰' '┴' '╯') -ForegroundColor DarkGray
-            Write-ColorOutput '✅ 激活中 🔑 备用密钥，同 model 不会被自动激活' DarkGray
+            Write-Host "$gray$(_HLine '╰' '┴' '╯')$reset"
         }
 
         Write-Host ''

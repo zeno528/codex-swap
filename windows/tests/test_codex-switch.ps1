@@ -61,7 +61,7 @@ try {
     Assert-True ($markers[$gptPath] -eq 'none') 'gpt 模板标为 none'
 } finally { Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue }
 
-Write-Host "`n=== Test 4: 同 model 多模板按 token 指纹精筛 ===" -ForegroundColor Cyan
+Write-Host "`n=== Test 4: 同 model 多模板按 model+provider 匹配（与 Linux 一致） ===" -ForegroundColor Cyan
 $tmpDir2 = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmpDir2 | Out-Null
 try {
@@ -73,8 +73,8 @@ try {
     [System.IO.File]::WriteAllText($cfg2, 'model = "x"' + "`n" + 'model_provider = "p"' + "`n" + 'experimental_bearer_token = "test-token-BBBBBBBBBB22222222222222"', [System.Text.UTF8Encoding]::new($false))
 
     $markers = Resolve-ActiveMarkers -Files @($t1, $t2) -ConfigPath $cfg2
-    Assert-True ($markers[$t1] -eq 'backup') 'token 不匹配 → backup'
-    Assert-True ($markers[$t2] -eq 'active') 'token 匹配 → active'
+    Assert-True ($markers[$t1] -eq 'active') '同 model+provider 模板 1 标为 active'
+    Assert-True ($markers[$t2] -eq 'active') '同 model+provider 模板 2 标为 active'
 } finally { Remove-Item $tmpDir2 -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== Test 5: Save-ModelState + Get-SwitchContent 状态优先 ===" -ForegroundColor Cyan
