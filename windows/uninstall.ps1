@@ -8,7 +8,7 @@
     数据目录 ~/.codex（models/model-states/backups_model）不受影响。
 
 .EXAMPLE
-    .\uninstall.ps1
+    .\windows\uninstall.ps1
 #>
 [CmdletBinding()]
 param([switch]$Yes)

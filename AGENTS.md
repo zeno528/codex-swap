@@ -4,7 +4,7 @@
 
 | 分支 | 位置 | 实现 | 运行时 |
 |:-----|:-----|:-----|:-------|
-| **Windows** | `src/` + `bin/` | PowerShell 7 模块（psm1 + psd1） | 必须用 pwsh 7+ |
+| **Windows** | `windows/` | PowerShell 7 模块（psm1 + psd1） | 必须用 pwsh 7+ |
 | **Linux/WSL2** | `linux/` | 纯 bash（自包含单脚本） | **禁止**引入 pwsh/Windows 依赖 |
 
 两条铁律：
@@ -14,11 +14,8 @@
 ## 目录结构
 
 ```
-src/                  Windows 分支核心（codex-switch.psm1 / .psd1 / .ps1 入口）
-bin/codex-switch.cmd  Windows 启动器
+windows/              Windows 分支（src/、bin/、安装器、卸载器、测试）
 linux/                Linux 分支（codex-switch 主脚本 / install.sh / uninstall.sh）
-install.ps1 / uninstall.ps1   Windows 安装器/卸载器
-tests/                Windows 分支单元测试
 docs/                 架构文档
 legacy/               v1 冻结代码，只读不维护
 ```
@@ -27,8 +24,8 @@ legacy/               v1 冻结代码，只读不维护
 
 发版时四处必须同步，缺一不可：
 
-1. `src/codex-switch.psm1` → `$script:ScriptVersion`
-2. `src/codex-switch.psd1` → `ModuleVersion`
+1. `windows/src/codex-switch.psm1` → `$script:ScriptVersion`
+2. `windows/src/codex-switch.psd1` → `ModuleVersion`
 3. `linux/codex-switch` → `VERSION="..."`
 4. git tag → `vX.Y.Z`
 
@@ -37,7 +34,7 @@ legacy/               v1 冻结代码，只读不维护
 ## 开发规范（Windows 分支）
 
 - 纯函数与命令分离：可测试的纯函数导出到 manifest `FunctionsToExport`，UI/IO 命令留在模块内
-- 路径必须跨平台：测试/代码里用正斜杠（`../src/...`）、`[System.IO.Path]::GetTempPath()`，**禁止** `$env:TEMP`（Linux 为 null）
+- 路径使用 Windows PowerShell 约定；临时目录使用 `[System.IO.Path]::GetTempPath()`，**禁止** `$env:TEMP`
 - 文件读写统一 UTF-8 无 BOM：`[System.Text.UTF8Encoding]::new($false)`
 - 终端输出中文时先设 `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
 - 密钥显示一律掩码（前 6 + `****` + 后 6），永不打印完整 token
@@ -51,9 +48,9 @@ legacy/               v1 冻结代码，只读不维护
 
 ## 测试规范
 
-### Windows 分支（tests/test_codex-switch.ps1）
+### Windows 分支（windows/tests/test_codex-switch.ps1）
 
-- 运行：`pwsh ./tests/test_codex-switch.ps1`，退出码非 0 = 失败
+- 运行：`pwsh ./windows/tests/test_codex-switch.ps1`，退出码非 0 = 失败
 - 断言：`Assert-True` 输出 ✅/❌，结尾输出 通过/失败 计数
 - **禁止触碰真实 `~/.codex`**：全部走临时目录，用完清理
 - 测试数据用 `test-token-` 前缀的假密钥，**禁止**形似真实密钥（防扫描误报）
@@ -67,8 +64,8 @@ legacy/               v1 冻结代码，只读不维护
 
 ### CI（push 自动跑）
 
-- `ci.yml`：Windows+Ubuntu 跑 pwsh 测试（**两平台都必须过**）+ Ubuntu bash 语法/冒烟
-- `release.yml`：tag 触发，测试通过后构建 `codex-switch-windows.zip`（src+bin）和 `codex-switch-linux.zip`（linux/codex-switch）双包
+- `ci.yml`：Windows 跑 pwsh 测试 + Ubuntu 跑 bash 语法/冒烟
+- `release.yml`：tag 触发，测试通过后构建 `codex-switch-windows.zip`（windows/src+windows/bin）和 `codex-switch-linux.zip`（linux/codex-switch）双包
 
 ## 安全规范
 

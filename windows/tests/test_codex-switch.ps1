@@ -1,5 +1,5 @@
 #requires -Version 7.0
-# 单元测试 codex-switch v2 核心模块
+# 单元测试 codex-switch v0.2.0 核心模块
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'

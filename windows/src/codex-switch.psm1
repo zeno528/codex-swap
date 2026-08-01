@@ -1,7 +1,7 @@
 #requires -Version 7.0
-# codex-switch v2 核心模块
+# codex-switch v0.2.0 核心模块
 # 切换 Codex 模型配置：模板播种 + 状态恢复
-# 数据目录 ~/.codex（Windows: %USERPROFILE%\.codex，Linux: $HOME/.codex）
+# 数据目录：%USERPROFILE%\.codex
 
 $script:ScriptVersion = '0.2.0'
 $script:RepoOwner      = 'zeno528'
@@ -9,10 +9,7 @@ $script:RepoName       = 'codex-switch'
 $script:ReleaseAsset   = 'codex-switch-windows.zip'
 
 function Get-CodexHome {
-    if (-not [string]::IsNullOrEmpty($env:USERPROFILE)) {
-        return Join-Path $env:USERPROFILE '.codex'
-    }
-    return Join-Path $HOME '.codex'
+    return Join-Path $env:USERPROFILE '.codex'
 }
 
 $script:CodexHome  = Get-CodexHome
@@ -603,19 +600,13 @@ function Invoke-Menu {
         if ($choice -eq 'q' -or $choice -eq 'Q') { return }
         if ([string]::IsNullOrWhiteSpace($choice)) { continue }
 
-        # 字母 o：打开模板目录（按平台选择，不引入跨平台依赖）
+        # 字母 o：在 Windows 资源管理器中打开模板目录
         if ($choice -eq 'o' -or $choice -eq 'O') {
             if (-not [System.IO.Directory]::Exists($script:ModelsDir)) {
                 Write-ColorOutput "❌ 目录不存在: $($script:ModelsDir)" Yellow
             } else {
                 Write-ColorOutput "📂 已打开: $($script:ModelsDir)" DarkGray
-                if ($IsWindows) {
-                    Start-Process explorer.exe $script:ModelsDir
-                } elseif ($IsLinux) {
-                    Start-Process xdg-open $script:ModelsDir
-                } else {
-                    Write-ColorOutput "   请手动打开: $($script:ModelsDir)" DarkGray
-                }
+                Start-Process explorer.exe $script:ModelsDir
             }
             Write-ColorOutput "" White
             continue

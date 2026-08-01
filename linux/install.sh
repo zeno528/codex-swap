@@ -4,7 +4,7 @@
 #
 # 用法：
 #   bash <(curl -fsSL https://raw.githubusercontent.com/zeno528/codex-switch/main/linux/install.sh)
-#   bash install.sh v2.0.0          # 指定版本
+#   bash install.sh v0.2.0          # 指定版本
 #   bash install.sh --uninstall     # 卸载（不动 ~/.codex 数据）
 set -euo pipefail
 

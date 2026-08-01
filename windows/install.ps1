@@ -9,15 +9,15 @@
     数据目录 ~/.codex（models/model-states/backups_model）不受安装/卸载影响。
 
     一行安装（PowerShell 7）：
-        irm https://raw.githubusercontent.com/zeno528/codex-switch/main/install.ps1 | iex
+        irm https://raw.githubusercontent.com/zeno528/codex-switch/main/windows/install.ps1 | iex
 
     或下载后指定参数运行：
-        .\install.ps1 -Version v2.0.0        # 指定版本
+        .\windows\install.ps1 -Version v0.2.0 # 指定版本
         .\install.ps1 -Yes                   # 跳过确认
         .\install.ps1 -Uninstall             # 卸载（仅删除程序本体，不动数据）
 
 .EXAMPLE
-    .\install.ps1
+    .\windows\install.ps1
 #>
 [CmdletBinding()]
 param(

@@ -36,7 +36,7 @@ config.toml ◄─────────────── model-states/gpt.to
 ## 模块结构
 
 ```
-src/
+windows/src/
 ├── codex-switch.psd1        # manifest（版本号唯一来源）
 ├── codex-switch.psm1        # 全部逻辑
 │   ├── 纯函数（可测试）: Get-TemplateFingerprint / Get-CurrentFingerprint /
@@ -45,12 +45,12 @@ src/
 │   └── 命令: Invoke-CodexSwitch（分发）/ Invoke-Menu / Invoke-List /
 │       Invoke-Current / Invoke-Use / Invoke-Update / Invoke-Doctor
 └── codex-switch.ps1         # 入口：Import-Module + 分发
-bin/codex-switch.cmd         # 启动器（调 pwsh -File 入口）
+windows/bin/codex-switch.cmd # 启动器（调 pwsh -File 入口）
 ```
 
 ## 分发
 
-- **Windows**：`install.ps1`（irm|iex）→ GitHub API 取 latest release → 下载 `codex-switch-windows.zip` → 解压到 `~/.local/bin/codex-switch/` → 写 `.cmd` shim → 确保 PATH
+- **Windows**：`windows/install.ps1`（irm|iex）→ GitHub API 取 latest release → 下载 `codex-switch-windows.zip` → 解压到 `~/.local/bin/codex-switch/` → 写 `.cmd` shim → 确保 PATH
 - **Linux/WSL2**：`linux/install.sh`（bash <(curl ...)）→ 下载 `codex-switch-linux.zip` → 安装 `~/.local/bin/codex-switch`（单一脚本）→ 确保 PATH。**纯 bash 独立实现，零 pwsh/Windows 依赖**
 - **自更新**：Windows `Invoke-Update` / Linux `cmd_update` → 版本比对 → 下载对应平台 zip → 备份 → 替换 → 校验
 - **CI**：ci.yml（Windows+Linux 跑测试 + Linux bash 冒烟）/ release.yml（打 tag 自动构建双 zip 上传）
@@ -59,16 +59,21 @@ bin/codex-switch.cmd         # 启动器（调 pwsh -File 入口）
 
 ```
 Windows 分支                 Linux/WSL2 分支（独立实现，零共享代码）
-├── src/*.psm1               ├── linux/codex-switch   （纯 bash 主脚本）
-├── bin/*.cmd                ├── linux/install.sh
-├── install.ps1              └── linux/uninstall.sh
-├── tests/
+├── windows/src/*.psm1       ├── linux/codex-switch   （纯 bash 主脚本）
+├── windows/bin/*.cmd        ├── linux/install.sh
+├── windows/install.ps1      └── linux/uninstall.sh
+├── windows/uninstall.ps1
+├── windows/tests/
 └── 数据机制完全一致: models/ + model-states/ + backups_model/
 ```
 
 ## 版本管理
 
-- `src/codex-switch.psd1` 的 `ModuleVersion` 与 git tag（`v2.0.0`）同步
+- 以下四处必须同步为同一版本（当前为 `0.2.0`）：
+  - `windows/src/codex-switch.psm1` 的 `$script:ScriptVersion`
+  - `windows/src/codex-switch.psd1` 的 `ModuleVersion`
+  - `linux/codex-switch` 的 `VERSION`
+  - git tag 的 `vX.Y.Z`
 - `update` 用 `Compare-Version` 做 semver 比对（支持 v 前缀、缺位补零）
 
 ## 数据安全

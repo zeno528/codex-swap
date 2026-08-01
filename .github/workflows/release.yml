@@ -15,7 +15,7 @@ jobs:
 
       - name: Run tests (pwsh, Windows 分支)
         shell: pwsh
-        run: ./tests/test_codex-switch.ps1
+        run: ./windows/tests/test_codex-switch.ps1
 
       - name: Bash syntax check (Linux 分支)
         run: |
@@ -26,7 +26,7 @@ jobs:
       - name: Build release zips
         shell: pwsh
         run: |
-          Compress-Archive -Path src, bin -DestinationPath codex-switch-windows.zip -Force
+          Compress-Archive -Path windows/src, windows/bin -DestinationPath codex-switch-windows.zip -Force
           Compress-Archive -Path linux/codex-switch -DestinationPath codex-switch-linux.zip -Force
 
       - name: Create GitHub Release

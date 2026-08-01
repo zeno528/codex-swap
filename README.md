@@ -14,15 +14,15 @@
 一行命令（PowerShell 7）：
 
 ```powershell
-irm https://raw.githubusercontent.com/zeno528/codex-switch/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/zeno528/codex-switch/main/windows/install.ps1 | iex
 ```
 
 或下载后指定参数：
 
 ```powershell
-.\install.ps1            # 安装最新版
-.\install.ps1 -Version v0.2.0   # 指定版本
-.\install.ps1 -Uninstall # 卸载（不动数据）
+.\windows\install.ps1            # 安装最新版
+.\windows\install.ps1 -Version v0.2.0   # 指定版本
+.\windows\install.ps1 -Uninstall # 卸载（不动数据）
 ```
 
 安装内容：程序装到 `~/.local/bin/codex-switch/`，启动器 `~/.local/bin/codex-switch.cmd`（该目录不在 PATH 会自动添加，**新终端生效**）。数据目录 `~/.codex` 全程不受影响。
@@ -62,7 +62,7 @@ codex-switch doctor             # 体检（目录/模板/状态/依赖检查）
 ## 开发
 
 ```powershell
-pwsh .\tests\test_codex-switch.ps1   # Windows 分支单元测试（26 项）
+pwsh .\windows\tests\test_codex-switch.ps1   # Windows 分支单元测试（26 项）
 bash linux/codex-switch list         # Linux 分支直接运行
 bash -n linux/codex-switch           # Linux 分支语法检查
 ```
@@ -70,15 +70,16 @@ bash -n linux/codex-switch           # Linux 分支语法检查
 ## 目录结构
 
 ```
-├── src/                  # Windows 分支：核心模块（psm1 + psd1 + 入口脚本）
-├── bin/                  # Windows 启动器（.cmd shim）
+├── windows/              # Windows 分支：PowerShell 7，独立实现
+│   ├── src/              #   核心模块（psm1 + psd1 + 入口脚本）
+│   ├── bin/              #   启动器（.cmd shim）
+│   ├── install.ps1       #   安装器（irm | iex）
+│   ├── uninstall.ps1     #   卸载器
+│   └── tests/            #   PowerShell 单元测试
 ├── linux/                # Linux/WSL2 分支：纯 bash 独立实现
 │   ├── codex-switch      #   主脚本（自包含）
 │   ├── install.sh        #   安装器
 │   └── uninstall.sh      #   卸载器
-├── install.ps1           # Windows 安装器（irm | iex）
-├── uninstall.ps1         # Windows 卸载器
-├── tests/                # Windows 分支单元测试
 ├── .github/workflows/    # CI + Release 自动打包（双 zip）
 └── legacy/               # v1 本地快捷版（codex-model，保留可用）
 ```

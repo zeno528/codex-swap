@@ -8,9 +8,9 @@
 
 ## 供应链说明（Supply Chain）
 
-- 安装命令从 `raw.githubusercontent.com/zeno528/codex-switch/main/install.ps1`（或 `linux/install.sh`）拉取安装器
+- 安装命令从 `raw.githubusercontent.com/zeno528/codex-switch/main/windows/install.ps1`（或 `linux/install.sh`）拉取安装器
 - 安装器通过 GitHub API 从 **Release 资产**（非 main 分支文件）下载运行时，tag 由 CI 构建，减少主分支被篡改的影响面
-- 生产环境使用建议：固定版本安装（`install.ps1 -Version vX.Y.Z` / `install.sh vX.Y.Z`）
+- 生产环境使用建议：固定版本安装（`windows/install.ps1 -Version vX.Y.Z` / `linux/install.sh vX.Y.Z`）
 
 ## 报告漏洞（Reporting a Vulnerability）
 
