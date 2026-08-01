@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.33] - 2026-08-02
+
+- fix(linux): 修复模型列表名称列宽错位
+
+
 ## [0.2.32] - 2026-08-01
 
 - refactor(linux): 移除菜单 X 卸载入口（卸载走 install.sh --uninstall）

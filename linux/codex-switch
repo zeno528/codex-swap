@@ -9,7 +9,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.32"
+VERSION="0.2.33"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -244,7 +244,7 @@ table_row() {
     printf '  '
     table_cell "$num" 4 "$color"
     table_cell_center "$status" 6 "$color"
-    table_cell "$name" 14 "$color"
+    table_cell "$name" 16 "$color"
     table_cell "$model" 26 "$color"
     table_cell "$provider" 14 "$color"
     printf "${DGRAY}│${C}\n"
@@ -265,7 +265,7 @@ cmd_list() {
 
     printf "${BOLD_CYAN}  🔍 模型配置${C}\n"
     table_rule '╭' '┬' '╮' 4 6 16 26 14
-    table_row '编号' '状态' '名称' '模型' '提供方' "$BOLD_CYAN"
+    table_row '编号' '状态' '名称' '模型' '供应商' "$BOLD_CYAN"
     table_rule '├' '┼' '┤' 4 6 16 26 14
 
     local i=0 f name model provider status color
