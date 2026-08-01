@@ -8,27 +8,42 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  test-windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Run tests (pwsh, Windows 分支)
         shell: pwsh
         run: ./windows/tests/test_codex-switch.ps1
 
-      - name: Bash syntax check (Linux 分支)
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bash syntax check and version validation
         run: |
           bash -n linux/codex-switch
           bash -n linux/install.sh
           bash -n linux/uninstall.sh
+          bash -n scripts/verify-release.sh
+          bash -n scripts/test-linux.sh
+          scripts/verify-release.sh "$GITHUB_REF_NAME"
+      - name: Linux 分支端到端切换测试
+        run: scripts/test-linux.sh
 
+  create-release:
+    needs: [test-windows, test-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Build release zips
-        shell: pwsh
         run: |
-          Compress-Archive -Path windows/src, windows/bin -DestinationPath codex-switch-windows.zip -Force
-          Compress-Archive -Path linux/codex-switch -DestinationPath codex-switch-linux.zip -Force
-
+          mkdir -p dist
+          cp -R windows/src windows/bin dist/
+          (cd dist && zip -qr ../codex-switch-windows.zip src bin)
+          (cd linux && zip -qr ../codex-switch-linux.zip codex-switch)
+      - name: Verify release packages
+        run: scripts/verify-release.sh "$GITHUB_REF_NAME" codex-switch-windows.zip codex-switch-linux.zip
       - name: Create GitHub Release
         run: gh release create "$GITHUB_REF_NAME" codex-switch-windows.zip codex-switch-linux.zip --generate-notes
         env:

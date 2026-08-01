@@ -23,23 +23,8 @@ jobs:
           bash -n linux/codex-switch
           bash -n linux/install.sh
           bash -n linux/uninstall.sh
-      - name: Linux 分支冒烟测试（隔离 HOME）
-        run: |
-          export HOME="$RUNNER_TEMP/codex-home"
-          mkdir -p "$HOME/.codex/models" "$HOME/.codex/model-states"
-          cat > "$HOME/.codex/models/deepseek.toml" <<'EOF'
-          model = "deepseek-v4-flash"
-          model_provider = "deepseek"
-          [model_providers.deepseek]
-          name = "deepseek"
-          EOF
-          cat > "$HOME/.codex/config.toml" <<'EOF'
-          model = "deepseek-v4-flash"
-          model_provider = "deepseek"
-          [model_providers.deepseek]
-          name = "deepseek"
-          EOF
-          bash linux/codex-switch list | grep -q deepseek
-          bash linux/codex-switch current | grep -q deepseek-v4-flash
-          bash linux/codex-switch doctor | grep -q "通过 7 / 7"
-          echo "Linux 冒烟测试通过"
+          bash -n scripts/verify-release.sh
+      - name: 校验双分支版本同步
+        run: scripts/verify-release.sh
+      - name: Linux 分支端到端切换测试（隔离 CODEX_HOME）
+        run: scripts/test-linux.sh

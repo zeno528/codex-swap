@@ -236,7 +236,7 @@ function Backup-Config {
     if (-not [System.IO.Directory]::Exists($script:BackupDir)) {
         [System.IO.Directory]::CreateDirectory($script:BackupDir) | Out-Null
     }
-    $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss-fffffff'
     $backupPath = Join-Path $script:BackupDir "config.$timestamp.toml"
     [System.IO.File]::Copy($script:ConfigPath, $backupPath, $true)
     $files = [System.IO.Directory]::GetFiles($script:BackupDir, 'config.*.toml') |

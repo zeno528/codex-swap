@@ -165,8 +165,15 @@ cmd_use() {
 
     # 3. 备份
     mkdir -p "$BACKUP_DIR"
-    local bak="$BACKUP_DIR/config.$(date +%Y%m%d-%H%M%S).toml"
+    local bak="$BACKUP_DIR/config.$(date +%Y%m%d-%H%M%S-%N).toml"
     cp "$CONFIG" "$bak"
+    local backups=() backup
+    mapfile -t backups < <(find "$BACKUP_DIR" -maxdepth 1 -type f -name 'config.*.toml' -printf '%f\n' | sort -r)
+    if [ "${#backups[@]}" -gt 5 ]; then
+        for backup in "${backups[@]:5}"; do
+            rm -f "$BACKUP_DIR/$backup"
+        done
+    fi
     echo "  📦 已备份 → $bak"
 
     # 4. 原子写入
