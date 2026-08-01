@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.29'
+$script:ScriptVersion = '0.2.30'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-switch'
 $script:ReleaseAsset   = 'codex-switch-windows.zip'
@@ -927,9 +927,9 @@ function Invoke-FirstRun {
     }
 
     # ② 模板来源（两分支）
-    Write-ColorOutput "📦 模型模板" Cyan
+    Write-ColorOutput "📦 模型配置来源" Cyan
     Write-ColorOutput "  1) 我有模板 — 打开目录手动导入" White
-    Write-ColorOutput "  2) 使用内置模板 — 🐳 DeepSeek" White
+    Write-ColorOutput "  2) DeepSeek 官方接入配置 — 🐳" White
     Write-ColorOutput "  3) 跳过 — 直接进入菜单" White
     $choice = Read-Host '选择 [1-3]'
     switch ($choice) {

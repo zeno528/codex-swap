@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.30] - 2026-08-01
+
+- refactor: 向导选项更名「DeepSeek 官方接入配置」（与官方文档一致）
+
+
 ## [0.2.29] - 2026-08-01
 
 - fix(linux): 安装询问改用 printf+read（read -p 在非终端不打印提示）
