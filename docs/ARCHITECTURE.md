@@ -53,7 +53,7 @@ windows/bin/codex-switch.cmd # 启动器（调 pwsh -File 入口）
 - **Windows**：`windows/install.ps1`（irm|iex）→ GitHub API 取 latest release → 下载 `codex-switch-windows.zip` → 解压到 `~/.local/bin/codex-switch/` → 写 `.cmd` shim → 确保 PATH
 - **Linux/WSL2**：`linux/install.sh`（bash <(curl ...)）→ 下载 `codex-switch-linux.zip` → 安装 `~/.local/bin/codex-switch`（单一脚本）→ 确保 PATH。**纯 bash 独立实现，零 pwsh/Windows 依赖**
 - **自更新**：Windows `Invoke-Update` / Linux `cmd_update` 只以根目录 `VERSION` 与本机版本判断是否更新；Release 仅提供下载资产。下载后必须校验资产内部版本等于 `VERSION`，不匹配即拒绝替换。
-- **CI**：ci.yml（Windows+Linux 跑测试 + Linux bash 冒烟）/ release.yml（打 tag 自动构建双 zip 上传）
+- **CI**：ci.yml（Windows+Linux 跑测试 + Linux bash 冒烟）/ release.yml（main 上 VERSION 变更时自动构建双 zip 上传）
 
 ## 双分支架构
 
@@ -70,7 +70,7 @@ Windows 分支                 Linux/WSL2 分支（独立实现，零共享代�
 ## 版本管理
 
 - 唯一版本源：根目录 `VERSION`；三处源码为 `@VERSION@` 占位符，由 `scripts/build.sh` 构建时注入
-- 发版：递增 `VERSION`（pre-commit hook 自动）→ 全量测试 → commit → `git tag v$(cat VERSION)` → push
+- 发版：递增 `VERSION`（pre-commit hook 自动）→ 全量测试 → commit 并推送 main；release workflow 读取 VERSION 后创建同名 tag 和 Release
 - 两分支的 `update` 均以根目录 `VERSION` 为唯一版本源；不比较 Release tag。下载的资产内部版本必须与 `VERSION` 一致，才允许升级。Windows 用 `Compare-Version` 做 semver 比对（支持 v 前缀、缺位补零）。
 
 ## 数据安全

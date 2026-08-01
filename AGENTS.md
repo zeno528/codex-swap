@@ -31,8 +31,8 @@ legacy/               v1 冻结代码，只读不维护
 - 改版本：只改 `VERSION` 一个文件；本地验证用 `scripts/build.sh --inject`
 - `pre-commit` hook（`.githooks/pre-commit`，`core.hooksPath` 指向 `.githooks`）：每次提交自动递增 `VERSION` 的 patch（99 进位，0.0.99 → 0.1.0）；检测到工作区 `VERSION` ≠ HEAD 时跳过（发版手动升 minor/major 不重复递增）
 - 构建/发版：`scripts/build.sh --package` 注入并产出双 zip；`scripts/verify-release.sh [tag] [zip...]` 校验 VERSION 格式、源码占位符状态、包内注入版本
-- 发版流程：递增 VERSION → 跑全量测试 → commit → `git tag v$(cat VERSION) && git push origin vX.Y.Z`（release workflow 自动构建双 zip + 创建 Release）
-- git tag 只在发版时手动打；源码永远不提交注入产物
+- 发版流程：递增 VERSION → 跑全量测试 → commit 并推送 main；release workflow 自动读取 VERSION、创建同名 vX.Y.Z tag、构建双 zip 并创建 Release
+- git tag 由 release workflow 创建；源码永远不提交注入产物
 
 ## 开发规范（Windows 分支）
 
@@ -68,7 +68,7 @@ legacy/               v1 冻结代码，只读不维护
 ### CI（push 自动跑）
 
 - `ci.yml`：Windows 跑 pwsh 测试 + Ubuntu 跑 bash 语法/冒烟
-- `release.yml`：tag 触发，测试通过后构建 `codex-switch-windows.zip`（windows/src+windows/bin）和 `codex-switch-linux.zip`（linux/codex-switch）双包
+- `release.yml`：main 上 VERSION 变更触发，测试通过后构建 `codex-switch-windows.zip`（windows/src+windows/bin）和 `codex-switch-linux.zip`（linux/codex-switch）双包并创建 Release
 
 ## 安全规范
 

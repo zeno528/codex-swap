@@ -2,7 +2,8 @@ name: release
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths: [VERSION]
 
 permissions:
   contents: write
@@ -28,7 +29,7 @@ jobs:
           bash -n scripts/verify-release.sh
           bash -n scripts/test-linux.sh
           bash -n scripts/build.sh
-          scripts/verify-release.sh "$GITHUB_REF_NAME"
+          scripts/verify-release.sh "v$(tr -d '[:space:]' < VERSION)"
       - name: Linux 分支端到端切换测试
         run: scripts/test-linux.sh
 
@@ -40,8 +41,10 @@ jobs:
       - name: Build release zips (注入 VERSION)
         run: scripts/build.sh --package
       - name: Verify release packages
-        run: scripts/verify-release.sh "$GITHUB_REF_NAME" codex-switch-windows.zip codex-switch-linux.zip
+        run: scripts/verify-release.sh "v$(tr -d '[:space:]' < VERSION)" codex-switch-windows.zip codex-switch-linux.zip
       - name: Create GitHub Release
-        run: gh release create "$GITHUB_REF_NAME" codex-switch-windows.zip codex-switch-linux.zip --generate-notes
+        run: |
+          tag="v$(tr -d '[:space:]' < VERSION)"
+          gh release create "$tag" codex-switch-windows.zip codex-switch-linux.zip --target "$GITHUB_SHA" --generate-notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
