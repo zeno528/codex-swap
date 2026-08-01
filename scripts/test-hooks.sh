@@ -17,15 +17,16 @@ printf '0.2.18\n' > "$root/VERSION"
 mkdir -p "$root/linux"
 printf 'VERSION="0.2.18"\n' > "$root/linux/codex-switch"
 
-# === 第一轮：发布物提交 → 递增 + 写 changelog ===
+# === 第一轮：发布物提交（-m）→ 递增 + changelog 一次写入，无 amend ===
 git -C "$root" add .githooks VERSION linux/codex-switch
-git -C "$root" commit -q -m "feat: 初始发布物提交"
+first_out="$(git -C "$root" commit -m "feat: 初始发布物提交" 2>&1)"
 [ "$(tr -d '[:space:]' < "$root/VERSION")" = "0.2.19" ] || { echo "失败: 发布物提交未递增 VERSION"; exit 1; }
 grep -q '^VERSION="0.2.19"' "$root/linux/codex-switch" || { echo "失败: 源码版本未同步"; exit 1; }
 grep -Fq '## [0.2.19] - ' "$root/CHANGELOG.md" || { echo "失败: changelog 缺版本条目"; exit 1; }
 grep -Fq -- '- feat: 初始发布物提交' "$root/CHANGELOG.md" || { echo "失败: changelog 缺提交消息"; exit 1; }
-git -C "$root" show HEAD:CHANGELOG.md | grep -Fq -- '- feat: 初始发布物提交' || { echo "失败: changelog 条目未进入本次提交（post-commit amend 失效）"; exit 1; }
+git -C "$root" show HEAD:CHANGELOG.md | grep -Fq -- '- feat: 初始发布物提交' || { echo "失败: changelog 条目未进入本次提交"; exit 1; }
 [ -z "$(git -C "$root" status --porcelain)" ] || { echo "失败: 发布物提交后工作区应干净"; exit 1; }
+echo "$first_out" | grep -Fq 'post-commit: 自动 amend' && { echo "失败: -m 场景不应触发 post-commit amend"; exit 1; } || true
 
 # === 第二轮：非发布物提交 → 不递增、不写 changelog ===
 printf 'readme\n' > "$root/README.md"
@@ -35,13 +36,16 @@ git -C "$root" commit -q -m "docs: 文档调整"
 [ "$(grep -c '^## \[' "$root/CHANGELOG.md")" = 1 ] || { echo "失败: 非发布物提交不应写 changelog"; exit 1; }
 [ -z "$(git -C "$root" status --porcelain)" ] || { echo "失败: 非发布物提交后工作区应干净"; exit 1; }
 
-# === 第三轮：再次发布物提交 → 递增到 0.2.20 + 新条目 ===
+# === 第三轮：-F 消息文件场景 → 解析 -F 一次写入，无 amend ===
+printf 'feat: -F 消息文件提交\n' > "$root/msg.txt"
 printf 'VERSION="0.2.19"\nfeat: 改动\n' > "$root/linux/codex-switch"
 git -C "$root" add linux/codex-switch
-git -C "$root" commit -q -m "feat: 第二次发布物提交"
-[ "$(tr -d '[:space:]' < "$root/VERSION")" = "0.2.20" ] || { echo "失败: 第二次发布物提交未递增"; exit 1; }
-grep -Fq '## [0.2.20] - ' "$root/CHANGELOG.md" || { echo "失败: 第二次提交缺 changelog 条目"; exit 1; }
-git -C "$root" show HEAD:CHANGELOG.md | grep -Fq -- '- feat: 第二次发布物提交' || { echo "失败: 第二次 changelog 条目未进入提交"; exit 1; }
+third_out="$(git -C "$root" commit -F msg.txt 2>&1)"
+[ "$(tr -d '[:space:]' < "$root/VERSION")" = "0.2.20" ] || { echo "失败: 第三次提交未递增"; exit 1; }
+grep -Fq '## [0.2.20] - ' "$root/CHANGELOG.md" || { echo "失败: 第三次提交缺 changelog 条目"; exit 1; }
+git -C "$root" show HEAD:CHANGELOG.md | grep -Fq -- '- feat: -F 消息文件提交' || { echo "失败: -F 场景条目未进入提交"; exit 1; }
+rm -f "$root/msg.txt"
 [ -z "$(git -C "$root" status --porcelain)" ] || { echo "失败: 第三轮后工作区应干净"; exit 1; }
+echo "$third_out" | grep -Fq 'post-commit: 自动 amend' && { echo "失败: -F 场景不应触发 post-commit amend"; exit 1; } || true
 
 echo "Git hooks 测试通过（递增联动 + CHANGELOG 自动写入）"

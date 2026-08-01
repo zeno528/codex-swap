@@ -57,3 +57,10 @@ if [ -f "$ROOT/windows/src/codex-switch.psd1" ]; then
     git add "$ROOT/windows/src/codex-switch.psd1"
 fi
 echo "pre-commit: 版本号 $cur → $new（VERSION 与三处源码已同步）"
+# 提交消息可从命令行获取时（-m/-F/--amend）直接写 changelog 并随本次提交入库；
+# pre-commit 阶段 git add 有效（提交树尚未冻结）。编辑器交互提交由 prepare-commit-msg 兜底。
+msg="$(get_commit_msg || true)"
+if [ -n "$msg" ]; then
+    write_changelog_entry "$msg"
+    echo "pre-commit: $msg 已记录到 CHANGELOG（v$new）"
+fi
