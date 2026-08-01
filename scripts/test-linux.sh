@@ -22,13 +22,15 @@ output="$(bash linux/codex-switch doctor)"
 grep -q '通过 7 / 7' <<< "$output"
 
 output="$(bash linux/codex-switch use gpt)"
-grep -q '已切换到: gpt' <<< "$output"
+grep -q '已切换至 gpt' <<< "$output"
+grep -q '当前配置' <<< "$output"
+! grep -q '⚠️' <<< "$output"
 cmp "$test_root/deepseek-before.toml" "$CODEX_HOME/model-states/deepseek.toml"
 grep -q 'gpt-5.6-terra' "$CODEX_HOME/config.toml"
 
 printf '%s\n' 'trusted_project = "test-project"' >> "$CODEX_HOME/config.toml"
 output="$(bash linux/codex-switch use deepseek)"
-grep -q '已切换到: deepseek' <<< "$output"
+grep -q '已切换至 deepseek' <<< "$output"
 grep -q 'trusted_project = "test-project"' "$CODEX_HOME/model-states/gpt.toml"
 cmp "$test_root/deepseek-before.toml" "$CODEX_HOME/config.toml"
 test "$(find "$CODEX_HOME/backups_model" -name '*.toml' | wc -l)" -ge 2

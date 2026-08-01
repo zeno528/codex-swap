@@ -22,7 +22,7 @@ MODELS_DIR="$CODEX_HOME/models"
 STATE_DIR="$CODEX_HOME/model-states"
 BACKUP_DIR="$CODEX_HOME/backups_model"
 
-C='\033[0m' RED='\033[31m' GREEN='\033[32m' YELLOW='\033[33m' CYAN='\033[36m' DGRAY='\033[90m'
+C='\033[0m' RED='\033[31m' GREEN='\033[32m' YELLOW='\033[33m' CYAN='\033[38;2;63;174;194m' BOLD_CYAN='\033[1;38;2;63;174;194m' DGRAY='\033[90m'
 
 say()  { printf "${GREEN}%s${C}\n" "$1"; }
 warn() { printf "${YELLOW}%s${C}\n" "$1"; }
@@ -109,7 +109,7 @@ resolve_active() {
 
 cmd_current() {
     [ -f "$CONFIG" ] || fail "config 不存在: $CONFIG"
-    echo "  📦 当前生效的模型配置:"
+    printf "${BOLD_CYAN}  📦 当前生效的模型配置${C}\n"
     while IFS= read -r line; do
         line="${line#"${line%%[![:space:]]*}"}"   # 去行首空白
         [ -z "$line" ] && continue
@@ -148,13 +148,13 @@ display_width() {
 table_rule() {
     local left="$1" join="$2" right="$3" width first=true
     shift 3
-    printf '  %s' "$left"
+    printf "${DGRAY}  %s" "$left"
     for width in "$@"; do
         [ "$first" = true ] || printf '%s' "$join"
         repeat_char '─' "$width"
         first=false
     done
-    printf '%s\n' "$right"
+    printf "%s${C}\n" "$right"
 }
 
 table_cell() {
@@ -169,7 +169,7 @@ table_cell() {
         value_width=$(display_width "$value")
     fi
     printf "${DGRAY}│${C}${color}%s${C}" "$value"
-    printf '%*s' "$((width - value_width))" ''
+    printf "${DGRAY}%*s${C}" "$((width - value_width))" ''
 }
 
 table_row() {
@@ -196,9 +196,9 @@ cmd_list() {
     cur_model=$(get_field "$CONFIG" model)
     cur_provider=$(get_field "$CONFIG" model_provider)
 
-    printf "${CYAN}  🔍 模型模板${C}\n"
+    printf "${BOLD_CYAN}  🔍 模型模板${C}\n"
     table_rule '╭' '┬' '╮' 4 6 14 26 14
-    table_row '编号' '状态' '名称' '模型' '提供方' "$CYAN"
+    table_row '编号' '状态' '名称' '模型' '提供方' "$BOLD_CYAN"
     table_rule '├' '┼' '┤' 4 6 14 26 14
 
     local i=0 f name model provider status color
@@ -232,11 +232,11 @@ cmd_use() {
     if [ -n "$src" ]; then
         mkdir -p "$STATE_DIR"
         cp "$CONFIG" "$STATE_DIR/$src.toml"
-        say "💾 已保存 $src 的最新状态"
+        printf "${DGRAY}  💾 已保存状态：%s${C}\n" "$src"
     else
-        warn "⚠️ 当前 config 匹配不到任何模板，跳过状态保存（本次配置仍会备份）"
+        warn "  当前配置未匹配模板，未保存状态"
     fi
-    [ "$src" = "$name" ] && { say "✅ $name 已是最新状态，无需切换"; return; }
+    [ "$src" = "$name" ] && { say "  当前已是 $name，无需切换"; return; }
 
     # 2. 目标内容：状态优先，无状态用模板播种
     local content="$tpl" mode="模板初始化"
@@ -253,7 +253,7 @@ cmd_use() {
             rm -f "$BACKUP_DIR/$backup"
         done
     fi
-    echo "  📦 已备份 → $bak"
+    printf "${DGRAY}  📦 已备份：%s${C}\n" "$(basename "$bak")"
 
     # 4. 原子写入
     local tmp="$CONFIG.tmp"
@@ -264,7 +264,9 @@ cmd_use() {
     # 5. 输出（掩码密钥）
     local lines
     lines=$(wc -l < "$CONFIG")
-    say "✅ 已切换到: $name（$mode，$lines 行）"
+    printf "${GREEN}  ✅ 已切换至 %s${C}\n" "$name"
+    printf "${DGRAY}  来源：%s · %s 行${C}\n\n" "$mode" "$lines"
+    printf "${BOLD_CYAN}  📋 当前配置${C}\n"
     local n=0
     while IFS= read -r line && [ "$n" -lt 15 ]; do
         n=$((n+1))
@@ -272,24 +274,25 @@ cmd_use() {
         [[ "$line" == \[* ]] && break
         echo "  $(mask_line "$line")"
     done < "$CONFIG"
-    say "⚠️  请重启 Codex App 生效"
+    printf "${DGRAY}\n  ℹ️  重启 Codex App 后生效${C}\n"
 }
 
 cmd_update() {
-    echo "  🔎 检查更新 (v$VERSION)..."
+    printf "${DGRAY}  🔎 检查更新 · 当前 v%s${C}\n" "$VERSION"
     local json url source_version
     source_version=$(curl -fsSL "$VERSION_URL" | tr -d '[:space:]') || fail "无法获取 VERSION（网络或 GitHub 限流）"
     [[ "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "VERSION 格式无效: $source_version"
     if ! ver_gt "$source_version" "$VERSION"; then
-        say "✅ 已是最新版本 v$VERSION"; return
+        printf "${GREEN}  ✅ 已是最新版本 v%s${C}\n" "$VERSION"; return
     fi
-    warn "发现新版本: v$source_version（当前 v$VERSION）"
+    printf "${YELLOW}  发现新版本 · v%s${C}\n" "$source_version"
     json=$(curl -fsSL -H 'User-Agent: codex-switch' "$API_URL") || fail "无法获取最新版本（网络或 GitHub 限流）"
     url=$(printf '%s' "$json" | { grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*codex-switch-linux\.zip"' || true; } | head -n1 | sed 's/.*"\(http[^"]*\)".*/\1/')
     [ -n "$url" ] || fail "找不到资产 $ASSET_NAME"
 
     local tmp; tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' RETURN
+    printf "${DGRAY}  ⬇️  正在下载更新${C}\n"
     curl -fsSL -o "$tmp/$ASSET_NAME" "$url" || fail "下载失败"
     unzip -qo "$tmp/$ASSET_NAME" -d "$tmp/x" || fail "解压失败"
     local new="$tmp/x/codex-switch"
@@ -304,11 +307,11 @@ cmd_update() {
     cp "$new" "$self.tmp"
     chmod +x "$self.tmp"
     mv "$self.tmp" "$self"
-    say "✅ 已升级到 v$source_version"
+    printf "${GREEN}  ✅ 已升级至 v%s${C}\n" "$source_version"
 }
 
 cmd_doctor() {
-    echo "  🩺 codex-switch v$VERSION 体检"
+    printf "${BOLD_CYAN}  🩺 codex-switch v%s 体检${C}\n" "$VERSION"
     local ok=0 bad=0
     check() {
         local desc="$1"; shift
@@ -333,7 +336,7 @@ show_help() {
 cmd_menu() {
     while true; do
         clear
-        printf "${CYAN}  💻 codex-switch v%s · 模型切换${C}\n" "$VERSION"
+        printf "${BOLD_CYAN}  💻 codex-switch v%s · 模型切换${C}\n" "$VERSION"
         echo ""
         cmd_list
         local files=("$MODELS_DIR"/*.toml) prompt
