@@ -10,9 +10,12 @@ tag="${1:-}"
 version="$(tr -d '[:space:]' < VERSION)"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "VERSION 格式无效: $version"
 
-# 三处源码必须是未注入的占位符（仓库干净状态，防止误提交注入产物）
-for f in windows/src/codex-switch.psm1 windows/src/codex-switch.psd1 linux/codex-switch; do
-    grep -q '@VERSION@' "$f" || fail "$f 未处于占位符状态（应含 @VERSION@）"
+# 三处源码版本必须与 VERSION 文件一致（版本唯一来源：根目录 VERSION）
+psm1_ver="$(sed -n "s/^\$script:ScriptVersion[[:space:]]*=[[:space:]]*'\([^']*\)'.*/\1/p" windows/src/codex-switch.psm1)"
+psd1_ver="$(sed -n "s/^[[:space:]]*ModuleVersion[[:space:]]*=[[:space:]]*'\([^']*\)'.*/\1/p" windows/src/codex-switch.psd1)"
+linux_ver="$(sed -n 's/^VERSION="\([^"]*\)".*/\1/p' linux/codex-switch)"
+for v in "$psm1_ver" "$psd1_ver" "$linux_ver"; do
+    [ "$v" = "$version" ] || fail "源码版本 $v 与 VERSION $version 不一致"
 done
 
 if [ -n "$tag" ]; then

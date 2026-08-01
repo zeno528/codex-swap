@@ -9,7 +9,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.12"
+VERSION="0.2.14"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -356,7 +356,7 @@ cmd_menu() {
     while true; do
         clear 2>/dev/null || true
         printf "${BOLD_CYAN}  💻 codex-switch v%s · 模型切换${C}\n" "$VERSION"
-        printf '%b  \e]8;;%s\e\\%s\e]8;;\e\\%b\n' "$CYAN" "$REPO_URL" "$REPO_URL" "$C"
+        printf '%b  🔗 项目仓库: %s%b\n' "$CYAN" "$REPO_URL" "$C"
         echo ""
         cmd_list
         local files=("$MODELS_DIR"/*.toml) prompt
@@ -375,10 +375,10 @@ cmd_menu() {
             u|U)
                 cmd_update
                 if [ "$UPDATED" = true ]; then
-                    wait_for_menu "  按回车重新加载菜单，q 退出" || return 0
+                    wait_for_menu "  按回车重新加载菜单，q 退出 › " || return 0
                     exec bash "$(readlink -f "$0")"
                 fi
-                wait_for_menu "  按回车返回菜单，q 退出" || return 0
+                wait_for_menu "  按回车返回菜单，q 退出 › " || return 0
                 continue
                 ;;
         esac
@@ -387,14 +387,14 @@ cmd_menu() {
             if [ -f "${files[0]:-}" ] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#files[@]}" ]; then
                 name=$(basename "${files[$((choice-1))]}" .toml)
                 cmd_use "$name" || true
-                wait_for_menu "  按回车返回菜单，q 退出" || return 0
+                wait_for_menu "  按回车返回菜单，q 退出 › " || return 0
             else
                 warn "  ❌ 无效: $choice"
-                wait_for_menu "  按回车返回菜单，q 退出" || return 0
+                wait_for_menu "  按回车返回菜单，q 退出 › " || return 0
             fi
         else
             warn "  ❌ 无效: $choice"
-            wait_for_menu "  按回车返回菜单，q 退出" || return 0
+            wait_for_menu "  按回车返回菜单，q 退出 › " || return 0
         fi
     done
 }

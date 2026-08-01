@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pre-commit: 仅在改动发布物相关文件时自动递增 VERSION（唯一版本源，patch，99 进位）
-# 三处源码为 @VERSION@ 占位符，由 scripts/build.sh 在构建/发布时注入；tag 不发版时不打
+# 递增后同步三处源码版本号（linux/codex-switch、windows psm1/psd1），保持与 VERSION 一致
 # 文档/CI/元数据改动不递增，避免版本信号失真（README 提交不给用户制造"假更新"）
 set -euo pipefail
 
@@ -51,4 +51,9 @@ fi
 new="$(bump "$cur")"
 printf '%s\n' "$new" > "$VF"
 git add "$VF"
-echo "pre-commit: 版本号 $cur → $new（VERSION 已更新，构建时注入三处）"
+# 同步三处源码版本（源码为固化版本号，不再是 @VERSION@ 占位符）
+sed -i "s/^VERSION=\"[^\"]*\"/VERSION=\"$new\"/" "$ROOT/linux/codex-switch"
+sed -i "s/^\(\$script:ScriptVersion[[:space:]]*=[[:space:]]*'\)[^']*'/\1$new'/" "$ROOT/windows/src/codex-switch.psm1"
+sed -i "s/^\([[:space:]]*ModuleVersion[[:space:]]*=[[:space:]]*'\)[^']*'/\1$new'/" "$ROOT/windows/src/codex-switch.psd1"
+git add "$ROOT/linux/codex-switch" "$ROOT/windows/src/codex-switch.psm1" "$ROOT/windows/src/codex-switch.psd1"
+echo "pre-commit: 版本号 $cur → $new（VERSION 与三处源码已同步）"
