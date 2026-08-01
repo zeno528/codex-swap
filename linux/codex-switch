@@ -9,7 +9,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.21"
+VERSION="0.2.22"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -23,6 +23,8 @@ AUTH_FILE="$CODEX_HOME/auth.json"
 MODELS_DIR="$CODEX_HOME/models"
 STATE_DIR="$CODEX_HOME/model-states"
 BACKUP_DIR="$CODEX_HOME/backups_model"
+MODELS_JSON="$CODEX_HOME/models.json"
+DEEPSEEK_MIN_CODEX="0.144.0"
 UPDATED=false
 
 C='\033[0m' RED='\033[31m' GREEN='\033[32m' YELLOW='\033[33m' CYAN='\033[38;2;63;174;194m' BOLD_CYAN='\033[1;38;2;63;174;194m' DGRAY='\033[90m'
@@ -202,6 +204,15 @@ table_cell_center() {
     printf "${DGRAY}│%*s${C}${color}%s${C}${DGRAY}%*s${C}" "$left" '' "$value" "$right" ''
 }
 
+# === 工具：模板显示名（DeepSeek 系列带 🐳） ===
+fmt_name() {
+    local name="$1"
+    case "$name" in
+        deepseek*) printf "🐳 %s" "$name" ;;
+        *)         printf "%s" "$name" ;;
+    esac
+}
+
 table_row() {
     local num="$1" status="$2" name="$3" model="$4" provider="$5" color="$6"
     printf '  '
@@ -227,9 +238,9 @@ cmd_list() {
     cur_provider=$(get_field "$CONFIG" model_provider)
 
     printf "${BOLD_CYAN}  🔍 模型配置${C}\n"
-    table_rule '╭' '┬' '╮' 4 6 14 26 14
+    table_rule '╭' '┬' '╮' 4 6 16 26 14
     table_row '编号' '状态' '名称' '模型' '提供方' "$BOLD_CYAN"
-    table_rule '├' '┼' '┤' 4 6 14 26 14
+    table_rule '├' '┼' '┤' 4 6 16 26 14
 
     local i=0 f name model provider status color
     for f in "$MODELS_DIR"/*.toml; do
@@ -244,9 +255,9 @@ cmd_list() {
             status='✅'
             color="$GREEN"
         fi
-        table_row "$i" "$status" "$name" "${model:--}" "${provider:--}" "$color"
+        table_row "$i" "$status" "$(fmt_name "$name")" "${model:--}" "${provider:--}" "$color"
     done
-    table_rule '╰' '┴' '╯' 4 6 14 26 14
+    table_rule '╰' '┴' '╯' 4 6 16 26 14
 }
 
 cmd_use() {
@@ -315,7 +326,7 @@ cmd_use() {
     # 5. 输出（掩码密钥）
     local lines
     lines=$(wc -l < "$CONFIG")
-    printf "${GREEN}  ✅ 已切换至 %s${C}\n" "$name"
+    printf "${GREEN}  ✅ 已切换至 %s${C}\n" "$(fmt_name "$name")"
     printf "${DGRAY}  来源：%s · %s 行${C}\n\n" "$mode" "$lines"
     printf "${BOLD_CYAN}  📋 当前配置${C}\n"
     local n=0
@@ -383,6 +394,315 @@ cmd_doctor() {
 show_help() {
     echo "用法: codex-switch [use <name>] | [list] | [current] | [update] | [doctor] | [help]"
     echo "      菜单内: o 打开模板目录，u 检查并升级"
+    echo "      首次运行（模板目录为空）自动进入初始化向导"
+}
+
+# === 内置模板：🐳 DeepSeek-V4-Flash ===
+TEMPLATE_DEEPSEEK=$(cat <<'TEMPLATE_EOF'
+# ============================================================
+# 🐳 DeepSeek-V4-Flash 模板
+# 官方接入文档: https://api-docs.deepseek.com/zh-cn/quick_start/agent_integrations/codex
+# API Key 申请: https://platform.deepseek.com/api_keys
+# base_url: https://api.deepseek.com（OpenAI 兼容，国内直连）
+# 注意: 旧模型名 deepseek-chat/deepseek-reasoner 已于 2026-07-24 弃用
+# ============================================================
+model = "deepseek-v4-flash"
+model_provider = "deepseek"
+preferred_auth_method = "apikey"
+forced_login_method = "api"
+model_reasoning_effort = "high"
+model_catalog_json = "__MODELS_JSON__"
+
+[model_providers.deepseek]
+name = "deepseek"
+base_url = "https://api.deepseek.com"
+wire_api = "responses"
+experimental_bearer_token = "__API_KEY__"
+TEMPLATE_EOF
+)
+
+# === 内置模板：🐳 DeepSeek-V4-Pro ===
+TEMPLATE_DEEPSEEK_PRO=$(cat <<'TEMPLATE_EOF'
+# ============================================================
+# 🐳 DeepSeek-V4-Pro 模板
+# 官方接入文档: https://api-docs.deepseek.com/zh-cn/quick_start/agent_integrations/codex
+# API Key 申请: https://platform.deepseek.com/api_keys
+# base_url: https://api.deepseek.com（OpenAI 兼容，国内直连）
+# 注意: 旧模型名 deepseek-chat/deepseek-reasoner 已于 2026-07-24 弃用
+# ============================================================
+model = "deepseek-v4-pro"
+model_provider = "deepseek"
+preferred_auth_method = "apikey"
+forced_login_method = "api"
+model_reasoning_effort = "high"
+model_catalog_json = "__MODELS_JSON__"
+
+[model_providers.deepseek]
+name = "deepseek"
+base_url = "https://api.deepseek.com"
+wire_api = "responses"
+experimental_bearer_token = "__API_KEY__"
+TEMPLATE_EOF
+)
+
+# === 内置模型目录 models.json（Codex 识别 V4 模型能力必需） ===
+# 核心元数据摘自 DeepSeek 官方 Codex 接入文档（2026-07，V4-Flash/V4-Pro）
+TEMPLATE_MODELS_JSON=$(cat <<'JSON_EOF'
+{
+  "models": [
+    {
+      "slug": "deepseek-v4-flash",
+      "display_name": "DeepSeek-V4-Flash",
+      "description": "Latest frontier agentic coding model.",
+      "prefer_websockets": false,
+      "support_verbosity": true,
+      "default_verbosity": "low",
+      "apply_patch_tool_type": "freeform",
+      "web_search_tool_type": "text",
+      "input_modalities": [
+        "text"
+      ],
+      "supports_image_detail_original": false,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_parallel_tool_calls": true,
+      "multi_agent_version": "v2",
+      "use_responses_lite": false,
+      "include_skills_usage_instructions": false,
+      "context_window": 1048576,
+      "max_context_window": 1048576,
+      "effective_context_window_percent": 95,
+      "auto_compact_token_limit": null,
+      "reasoning_summary_format": "experimental",
+      "default_reasoning_summary": "none",
+      "default_reasoning_level": "high",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Fast responses with lighter reasoning"
+        },
+        {
+          "effort": "high",
+          "description": "Extra high reasoning depth for complex problems"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth for the hardest problems"
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "minimal_client_version": "0.144.0",
+      "supported_in_api": true,
+      "supports_search_tool": true,
+      "supports_reasoning_summaries": true
+    },
+    {
+      "slug": "deepseek-v4-pro",
+      "display_name": "DeepSeek-V4-Pro",
+      "description": "Most capable frontier agentic coding model.",
+      "prefer_websockets": false,
+      "support_verbosity": true,
+      "default_verbosity": "low",
+      "apply_patch_tool_type": "freeform",
+      "web_search_tool_type": "text",
+      "input_modalities": [
+        "text"
+      ],
+      "supports_image_detail_original": false,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_parallel_tool_calls": true,
+      "multi_agent_version": "v2",
+      "use_responses_lite": false,
+      "include_skills_usage_instructions": false,
+      "context_window": 1048576,
+      "max_context_window": 1048576,
+      "effective_context_window_percent": 95,
+      "auto_compact_token_limit": null,
+      "reasoning_summary_format": "experimental",
+      "default_reasoning_summary": "none",
+      "default_reasoning_level": "high",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Fast responses with lighter reasoning"
+        },
+        {
+          "effort": "high",
+          "description": "Extra high reasoning depth for complex problems"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth for the hardest problems"
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "minimal_client_version": "0.144.0",
+      "supported_in_api": true,
+      "supports_search_tool": true,
+      "supports_reasoning_summaries": true
+    }
+  ]
+}
+JSON_EOF
+)
+
+# === 向导：检测 codex CLI（未安装则按系统输出安装命令，返回 1 退出向导） ===
+wizard_check_codex() {
+    command -v codex >/dev/null 2>&1 && return 0
+    printf "${YELLOW}  ⚠️ 未检测到 codex CLI，首次使用需要先安装${C}\n\n"
+    local os
+    os="$(uname -s)"
+    case "$os" in
+        Darwin)
+            if command -v brew >/dev/null 2>&1; then
+                printf "  ${GREEN}安装命令：${C}%s\n" "brew install --cask codex"
+            elif command -v npm >/dev/null 2>&1; then
+                printf "  ${GREEN}安装命令：${C}%s\n" "npm install -g @openai/codex"
+            else
+                printf "  ${GREEN}请先安装 Node.js：${C}%s\n" "brew install node"
+                printf "  ${GREEN}然后安装 Codex：${C}%s\n" "npm install -g @openai/codex"
+            fi
+            ;;
+        Linux)
+            if command -v npm >/dev/null 2>&1; then
+                printf "  ${GREEN}安装命令：${C}%s\n" "npm install -g @openai/codex"
+            elif [ -f /etc/os-release ] && grep -qiE '^(ID|ID_LIKE)="?(debian|ubuntu)' /etc/os-release; then
+                printf "  ${GREEN}请先安装 Node.js：${C}%s\n" "sudo apt install -y nodejs npm"
+                printf "  ${GREEN}然后安装 Codex：${C}%s\n" "npm install -g @openai/codex"
+            else
+                printf "  ${GREEN}请先安装 Node.js（https://nodejs.org），然后：${C}%s\n" "npm install -g @openai/codex"
+            fi
+            uname -r | grep -qi microsoft && printf "  ${DGRAY}（检测到 WSL 环境，同样使用上面的 npm 命令）${C}\n"
+            ;;
+        *)  printf "  ${GREEN}安装命令：${C}%s\n" "npm install -g @openai/codex" ;;
+    esac
+    printf "\n  ${DGRAY}安装完成后重新运行 codex-switch 即可进入向导${C}\n"
+    return 1
+}
+
+# === 向导：检查 codex 版本（DeepSeek V4 要求 ≥ 0.144.0） ===
+wizard_check_version() {
+    local ver ans
+    ver=$(codex --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+    [ -n "$ver" ] || return 0
+    if ver_gt "$DEEPSEEK_MIN_CODEX" "$ver"; then
+        printf "${YELLOW}  ⚠️ codex v%s 低于 DeepSeek V4 要求的最低版本 %s${C}\n" "$ver" "$DEEPSEEK_MIN_CODEX"
+        printf "  ${GREEN}升级命令：${C}%s\n" "npm install -g @openai/codex@latest"
+        read -r -p "  回车继续，q 退出升级 › " ans || true
+        if [ "$ans" = q ] || [ "$ans" = Q ]; then
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# === 向导：打开目录引导导入用户自己的模板 ===
+wizard_import_template() {
+    mkdir -p "$MODELS_DIR"
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$MODELS_DIR" >/dev/null 2>&1 || true
+        printf "  ${CYAN}已打开模板目录：${C}%s\n" "$MODELS_DIR"
+    else
+        printf "  ${CYAN}请打开模板目录：${C}%s\n" "$MODELS_DIR"
+    fi
+    printf "  ${DGRAY}把模板 .toml 文件放进去（如有凭据可放同名 .auth.json），然后回到这里按回车${C}\n"
+    local first=true ans
+    while [ -z "$(ls "$MODELS_DIR"/*.toml 2>/dev/null)" ]; do
+        if [ "$first" = true ]; then
+            read -r -p "  放入后按回车继续，q 取消 › " ans || { printf "\n"; return 1; }
+            first=false
+        else
+            read -r -p "  目录仍为空，放入后按回车，q 取消 › " ans || { printf "\n"; return 1; }
+        fi
+        if [ "$ans" = q ] || [ "$ans" = Q ]; then
+            printf "${DGRAY}  已取消导入${C}\n"
+            return 1
+        fi
+    done
+    printf "  ${GREEN}✅ 已检测到模板：${C}%s\n" "$(basename "$(ls "$MODELS_DIR"/*.toml 2>/dev/null | head -n1)")"
+    return 0
+}
+
+# === 向导：生成内置模板（替换占位符后写入） ===
+wizard_write_template() {
+    local name="$1" content="$2" key="$3" out
+    content="${content//__MODELS_JSON__/$MODELS_JSON}"
+    content="${content//__API_KEY__/$key}"
+    out="$MODELS_DIR/$name.toml"
+    printf '%s\n' "$content" > "$out"
+    printf "  ${GREEN}✅ 模板已创建：${C}%s\n" "$out"
+}
+
+# === 向导：写入模型目录 models.json ===
+wizard_write_models_json() {
+    printf '%s\n' "$TEMPLATE_MODELS_JSON" > "$MODELS_JSON"
+    printf "  ${GREEN}✅ 模型目录已写入：${C}%s\n" "$MODELS_JSON"
+}
+
+# === 向导：内置 🐳 DeepSeek 模板选择 + API Key 引导 ===
+wizard_builtin_template() {
+    printf "  ${GREEN}1)${C} 🐳 DeepSeek-V4-Flash — 默认模型，快速，适合日常编码\n"
+    printf "  ${GREEN}2)${C} 🐳 DeepSeek-V4-Pro — 深度推理，适合复杂任务\n"
+    local choice name content key ans
+    read -r -p "  选择 [1-2] › " choice || { printf "\n"; return 1; }
+    case "$choice" in
+        1) name="deepseek"     ; content="$TEMPLATE_DEEPSEEK" ;;
+        2) name="deepseek-pro" ; content="$TEMPLATE_DEEPSEEK_PRO" ;;
+        *) printf "${YELLOW}  无效选择，默认使用 DeepSeek-V4-Flash${C}\n"
+           name="deepseek"; content="$TEMPLATE_DEEPSEEK" ;;
+    esac
+
+    printf "\n  ${CYAN}🔑 DeepSeek API Key${C}\n"
+    printf "  ${DGRAY}在 platform.deepseek.com/api_keys 创建，可留空稍后手动填入模板${C}\n"
+    read -r -s -p "  API Key › " key || { printf "\n"; return 1; }
+    printf "\n"
+
+    mkdir -p "$MODELS_DIR"
+    wizard_write_template "$name" "$content" "$key"
+    wizard_write_models_json
+
+    if [ ! -f "$CONFIG" ]; then
+        printf "  ${DGRAY}未发现 config.toml，已直接初始化为该模板${C}\n"
+        cp "$MODELS_DIR/$name.toml" "$CONFIG"
+    else
+        read -r -p "  是否立即切换到该模板？[y/N] › " ans || true
+        if [ "$ans" = y ] || [ "$ans" = Y ]; then
+            cmd_use "$name" || true
+        fi
+    fi
+    return 0
+}
+
+# === 首次使用向导 ===
+cmd_first_run() {
+    printf "${BOLD_CYAN}  🚀 首次使用 · codex-switch 初始化向导${C}\n"
+    printf "${DGRAY}  引导完成 Codex 检查、模型模板与 API Key 配置${C}\n\n"
+
+    wizard_check_codex || return 1
+    wizard_check_version || return 1
+
+    printf "  ${BOLD_CYAN}📦 模型模板${C}\n"
+    printf "  ${GREEN}1)${C} 我有模板 — 打开目录手动导入\n"
+    printf "  ${GREEN}2)${C} 使用内置模板 — 🐳 DeepSeek\n"
+    printf "  ${GREEN}3)${C} 跳过 — 直接进入菜单\n"
+    local choice
+    read -r -p "  选择 [1-3] › " choice || { printf "\n"; return 1; }
+    case "$choice" in
+        1) wizard_import_template || { printf "${DGRAY}  跳过导入，进入菜单${C}\n"; } ;;
+        2) wizard_builtin_template || return 1 ;;
+        3) printf "  ${DGRAY}已跳过，进入菜单${C}\n" ;;
+        *) printf "${YELLOW}  无效选择，进入菜单${C}\n" ;;
+    esac
+    printf "\n  ${DGRAY}✨ 初始化完成${C}\n"
+    wait_for_menu "  按回车进入菜单，q 退出 › " || return 1
+    return 0
 }
 
 wait_for_menu() {
@@ -393,6 +713,10 @@ wait_for_menu() {
 
 # === 交互式菜单 ===
 cmd_menu() {
+    # 首次使用（模板目录为空）→ 初始化向导
+    if [ -z "$(ls "$MODELS_DIR"/*.toml 2>/dev/null)" ]; then
+        cmd_first_run || exit 0
+    fi
     while true; do
         clear 2>/dev/null || true
         printf "${BOLD_CYAN}  💻 codex-switch v%s · 模型切换${C}\n" "$VERSION"

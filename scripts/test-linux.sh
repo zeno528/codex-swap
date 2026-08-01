@@ -85,4 +85,27 @@ if output="$(PATH="$fake_bin:$PATH" bash "$test_root/codex-switch" update 2>&1)"
 fi
 grep -q '找不到资产 codex-switch-linux.zip' <<< "$output"
 
+# === 首次使用向导 ===
+wizard_home="$test_root/wizard"
+mkdir -p "$wizard_home"
+
+# 未装 codex：输出安装命令并退出
+output="$(CODEX_HOME="$wizard_home" bash linux/codex-switch menu </dev/null 2>&1)"
+grep -q '未检测到 codex CLI' <<< "$output"
+grep -qE 'npm install -g @openai/codex|brew install --cask codex' <<< "$output"
+
+# 内置 🐳 DeepSeek 模板：假 codex + 管道输入走完整向导
+cat > "$fake_bin/codex" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = "--version" ] && printf '0.144.0\n'
+EOF
+chmod +x "$fake_bin/codex"
+output="$(printf '2\n2\nsk-wizard-test-key\nN\nq\n' | CODEX_HOME="$wizard_home" PATH="$fake_bin:$PATH" bash linux/codex-switch menu 2>&1)"
+grep -q '模板已创建' <<< "$output"
+grep -q 'deepseek-v4-pro' "$wizard_home/models/deepseek-pro.toml"
+grep -q 'sk-wizard-test-key' "$wizard_home/models/deepseek-pro.toml"
+grep -q 'deepseek-v4-pro' "$wizard_home/config.toml"
+grep -q 'deepseek-v4-flash' "$wizard_home/models.json"
+grep -q 'deepseek-v4-pro' "$wizard_home/models.json"
+
 echo 'Linux 端到端切换测试通过'
