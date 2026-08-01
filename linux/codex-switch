@@ -354,7 +354,7 @@ wait_for_menu() {
 # === 交互式菜单 ===
 cmd_menu() {
     while true; do
-        clear
+        clear 2>/dev/null || true
         printf "${BOLD_CYAN}  💻 codex-switch v%s · 模型切换${C}\n" "$VERSION"
         printf "${CYAN}  \e]8;;$REPO_URL\e\\$REPO_URL\e]8;;\e\\${C}\n"
         echo ""
