@@ -34,6 +34,7 @@ scripts/              构建与校验脚本（build.sh / verify-release.sh / tes
 - 构建/发版：`scripts/build.sh --package` 注入并产出双 zip；`scripts/verify-release.sh [tag] [zip...]` 校验 VERSION 格式、源码占位符状态、包内注入版本
 - 发版流程：递增 VERSION → 跑全量测试 → commit 并推送 main；release workflow 自动读取 VERSION、创建同名 vX.Y.Z tag、构建双 zip 并创建 Release（notes 为自上次 tag 以来的 commit 列表）
 - git tag 由 release workflow 创建；源码永远不提交注入产物
+- **本地同步禁令**：不得为把源码同步到本机安装目录而改动根目录 `VERSION`，也不得手动把 `@VERSION@` 替换为任意版本号。需要本地同步时，只能使用 `scripts/build.sh --package` 生成且版本已注入的发行资产；缺少构建条件时停止并报告，不得伪造版本。
 
 ## 开发规范（Windows 分支）
 

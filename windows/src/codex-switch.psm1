@@ -653,7 +653,8 @@ function Compare-Version {
 # === 自更新：VERSION 是唯一版本源，Release 仅提供下载资产 ===
 function Get-SourceVersion {
     try {
-        $version = ([string](Invoke-RestMethod -Uri $script:VersionUrl -Headers @{ 'User-Agent' = 'codex-switch' } -TimeoutSec 15)).Trim()
+        $uri = "$($script:VersionUrl)?nocache=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
+        $version = ([string](Invoke-RestMethod -Uri $uri -Headers @{ 'User-Agent' = 'codex-switch' } -TimeoutSec 15)).Trim()
         if ($version -notmatch '^\d+\.\d+\.\d+$') { return $null }
         return $version
     } catch {
