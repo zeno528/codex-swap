@@ -62,7 +62,7 @@ jobs:
       - name: Create GitHub Release
         run: |
           tag="v$(tr -d '[:space:]' < VERSION)"
-          gh release create "$tag" codex-switch-windows.zip codex-switch-linux.zip --target "$GITHUB_SHA" --notes-file NOTES.md
+          gh release create "$tag" codex-switch-windows.zip codex-switch-linux.zip --target "$GITHUB_SHA" --title "$tag" --notes-file NOTES.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Prune old releases (仅保留最新 2 个)
