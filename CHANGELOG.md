@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.26] - 2026-08-01
+
+- feat(linux): models.json 升级为 DeepSeek 官方完整版（含系统提示词）
+
+
 ## [0.2.25] - 2026-08-01
 
 - feat(linux): API Key 输入逐字符掩码显示（•），支持退格
