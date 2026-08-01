@@ -38,13 +38,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - name: Build release zips (注入 VERSION)
         run: scripts/build.sh --package
       - name: Verify release packages
         run: scripts/verify-release.sh "v$(tr -d '[:space:]' < VERSION)" codex-switch-windows.zip codex-switch-linux.zip
+      - name: Generate release notes (commit 列表)
+        run: |
+          tag="v$(tr -d '[:space:]' < VERSION)"
+          prev="$(git tag --sort=-v:refname | head -1 || true)"
+          {
+            echo "## 更新内容"
+            if [ -n "$prev" ] && git merge-base --is-ancestor "$prev" HEAD 2>/dev/null; then
+              git log --format='- %s' "${prev}..HEAD"
+              echo ""
+              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${prev}...${tag}"
+            else
+              git log --format='- %s'
+            fi
+          } > NOTES.md
+          cat NOTES.md
       - name: Create GitHub Release
         run: |
           tag="v$(tr -d '[:space:]' < VERSION)"
-          gh release create "$tag" codex-switch-windows.zip codex-switch-linux.zip --target "$GITHUB_SHA" --generate-notes
+          gh release create "$tag" codex-switch-windows.zip codex-switch-linux.zip --target "$GITHUB_SHA" --notes-file NOTES.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
