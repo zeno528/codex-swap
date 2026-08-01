@@ -9,7 +9,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.15"
+VERSION="0.2.16"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -285,7 +285,7 @@ cmd_use() {
         [[ "$line" == \[* ]] && break
         echo "  $(mask_line "$line")"
     done < "$CONFIG"
-    printf "${DGRAY}\n  ℹ️  重启 Codex 后生效${C}\n"
+    printf "${DGRAY}\n  ℹ️ 重启 Codex 后生效${C}\n"
 }
 
 cmd_update() {
@@ -297,14 +297,14 @@ cmd_update() {
     if ! ver_gt "$source_version" "$VERSION"; then
         printf "${GREEN}  ✅ 已是最新版本 v%s${C}\n" "$VERSION"; return
     fi
-    printf "${YELLOW}  发现新版本 · v%s${C}\n" "$source_version"
+    printf "${YELLOW}  🚀 发现新版本 · v%s${C}\n" "$source_version"
     json=$(curl -fsSL -H 'User-Agent: codex-switch' "$API_URL") || fail "无法获取最新版本（网络或 GitHub 限流）"
     url=$(printf '%s' "$json" | { grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*codex-switch-linux\.zip"' || true; } | head -n1 | sed 's/.*"\(http[^"]*\)".*/\1/')
     [ -n "$url" ] || fail "找不到资产 $ASSET_NAME"
 
     local tmp; tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' RETURN
-    printf "${DGRAY}  ⬇️  正在下载更新${C}\n"
+    printf "${DGRAY}  ⬇️ 正在下载更新${C}\n"
     curl -fsSL -o "$tmp/$ASSET_NAME" "$url" || fail "下载失败"
     unzip -qo "$tmp/$ASSET_NAME" -d "$tmp/x" || fail "解压失败"
     local new="$tmp/x/codex-switch"
