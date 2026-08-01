@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.30'
+$script:ScriptVersion = '0.2.31'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-switch'
 $script:ReleaseAsset   = 'codex-switch-windows.zip'
@@ -930,13 +930,18 @@ function Invoke-FirstRun {
     Write-ColorOutput "📦 模型配置来源" Cyan
     Write-ColorOutput "  1) 我有模板 — 打开目录手动导入" White
     Write-ColorOutput "  2) DeepSeek 官方接入配置 — 🐳" White
-    Write-ColorOutput "  3) 跳过 — 直接进入菜单" White
-    $choice = Read-Host '选择 [1-3]'
-    switch ($choice) {
-        '1' { if (-not (Invoke-ImportTemplate)) { Write-ColorOutput "跳过导入，进入菜单" DarkGray } }
-        '2' { if (-not (Invoke-BuiltinTemplate)) { return $false } }
-        '3' { Write-ColorOutput "已跳过，进入菜单" DarkGray }
-        default { Write-ColorOutput "无效选择，进入菜单" Yellow }
+    Write-ColorOutput "  q) 退出向导" DarkGray
+    while ($true) {
+        $choice = Read-Host '选择 [1-2]'
+        if ($choice -eq 'q' -or $choice -eq 'Q') { return $false }
+        switch ($choice) {
+            '1' {
+                if (-not (Invoke-ImportTemplate)) { Write-ColorOutput "跳过导入，进入菜单" DarkGray }
+                return $true
+            }
+            '2' { return (Invoke-BuiltinTemplate) }
+        }
+        Write-ColorOutput "无效选择，请重试" Yellow
     }
 
     Write-ColorOutput "" White
