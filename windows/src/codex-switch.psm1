@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.20'
+$script:ScriptVersion = '0.2.21'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-switch'
 $script:ReleaseAsset   = 'codex-switch-windows.zip'
@@ -463,13 +463,9 @@ function Invoke-Use {
     if ($null -ne $sourceName) {
         Save-ModelState -Name $sourceName -ConfigPath $script:ConfigPath -StateDir $script:StateDir
         Write-ColorOutput "💾 已保存 $sourceName 的最新状态" DarkGray
-        $srcAuthTpl = Join-Path $script:ModelsDir "$sourceName.auth.json"
-        $srcAuthState = Join-Path $script:StateDir "$sourceName.auth.json"
-        if ([System.IO.File]::Exists($srcAuthTpl) -or [System.IO.File]::Exists($srcAuthState)) {
-            Save-ModelAuth -Name $sourceName -AuthPath $script:AuthPath -StateDir $script:StateDir
-            if ([System.IO.File]::Exists($script:AuthPath)) {
-                Write-ColorOutput "🔑 已保存 $sourceName 的 auth 状态" DarkGray
-            }
+        Save-ModelAuth -Name $sourceName -AuthPath $script:AuthPath -StateDir $script:StateDir
+        if ([System.IO.File]::Exists($script:AuthPath)) {
+            Write-ColorOutput "🔑 已保存 $sourceName 的 auth 状态" DarkGray
         }
     } else {
         Write-ColorOutput "⚠️ 当前 config 匹配不到任何模板，跳过状态保存（本次配置仍会备份）" Yellow
@@ -507,7 +503,7 @@ function Invoke-Use {
     $lineCount = ($newContent -split [char]10).Count
     Write-ColorOutput "✅ 已切换到: $Name（$mode，$lineCount 行）" Green
 
-    # 5.5 同步 auth.json（内容永不打印）
+    # 5.5 同步 auth.json（内容永不打印；无记录则清空防凭据串用）
     $auth = Get-SwitchAuth -Name $Name -ModelsDir $script:ModelsDir -StateDir $script:StateDir
     if ($null -ne $auth.Source) {
         $authTmp = "$($script:AuthPath).tmp"
@@ -523,8 +519,11 @@ function Invoke-Use {
             throw
         }
         Write-ColorOutput "🔑 auth.json 已同步（$Name）" Green
+    } elseif ([System.IO.File]::Exists($script:AuthPath)) {
+        [System.IO.File]::Delete($script:AuthPath)
+        Write-ColorOutput "🔑 $Name 无 auth 记录，已清空 auth.json（防凭据串用）" Yellow
     } else {
-        Write-ColorOutput "🔑 该模型未托管 auth.json，保持现状" DarkGray
+        Write-ColorOutput "🔑 $Name 无 auth 记录" DarkGray
     }
     foreach ($line in ($newContent -split [char]10)) {
         $t = $line.Trim()

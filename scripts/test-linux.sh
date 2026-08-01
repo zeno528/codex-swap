@@ -57,10 +57,13 @@ grep -q 'auth.json 已同步（gpt）' <<< "$output"
 grep -q 'test-token-gpt-auth-grown' "$CODEX_HOME/auth.json"
 test "$(find "$CODEX_HOME/backups_model" -name 'auth.*.json' | wc -l)" -ge 1
 
-# 未托管 auth 的模型不触碰 auth.json
+# 无 auth 记录的模型：切入清空防串用；切回时 auth 从快照恢复
 printf '%s\n' 'model = "claude-4"' 'model_provider = "anthropic"' > "$CODEX_HOME/models/claude.toml"
 output="$(bash linux/codex-switch use claude)"
-grep -q '该模型未托管 auth.json，保持现状' <<< "$output"
+grep -q '无 auth 记录，已清空 auth.json' <<< "$output"
+test ! -f "$CODEX_HOME/auth.json"
+output="$(bash linux/codex-switch use gpt)"
+grep -q 'auth.json 已同步（gpt）' <<< "$output"
 grep -q 'test-token-gpt-auth-grown' "$CODEX_HOME/auth.json"
 output="$(printf '1\nq\nq\n' | bash linux/codex-switch 2>&1)"
 test "$(grep -o '模型切换' <<< "$output" | wc -l)" -eq 1

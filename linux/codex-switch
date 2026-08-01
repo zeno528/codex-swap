@@ -9,7 +9,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.20"
+VERSION="0.2.21"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -108,16 +108,9 @@ resolve_active() {
     echo ""
 }
 
-# === 核心：auth.json 托管 — 模板或已有状态任一存在即视为托管 ===
-has_auth_managed() {
-    local name="$1"
-    [ -f "$MODELS_DIR/$name.auth.json" ] || [ -f "$STATE_DIR/$name.auth.json" ]
-}
-
-# === 核心：切出时保存/清空模型 auth 状态（快照反映最新状态） ===
+# === 核心：切出时保存/清空模型 auth 状态（默认托管，快照反映最新状态） ===
 save_model_auth() {
     local name="$1"
-    has_auth_managed "$name" || return 0
     mkdir -p "$STATE_DIR"
     if [ -f "$AUTH_FILE" ]; then
         cp "$AUTH_FILE" "$STATE_DIR/$name.auth.json"
@@ -304,7 +297,7 @@ cmd_use() {
     [ -s "$tmp" ] || fail "原子写校验失败：临时文件为空"
     mv "$tmp" "$CONFIG"
 
-    # 4.5 同步 auth.json（内容永不打印）
+    # 4.5 同步 auth.json（内容永不打印；无记录则清空防凭据串用）
     local auth_src
     auth_src="$(get_switch_auth "$name")"
     if [ -n "$auth_src" ]; then
@@ -312,8 +305,11 @@ cmd_use() {
         [ -s "$AUTH_FILE.tmp" ] || fail "原子写校验失败：auth 临时文件为空"
         mv "$AUTH_FILE.tmp" "$AUTH_FILE"
         printf "${GREEN}  🔑 auth.json 已同步（%s）${C}\n" "$name"
+    elif [ -f "$AUTH_FILE" ]; then
+        rm -f "$AUTH_FILE"
+        printf "${YELLOW}  🔑 %s 无 auth 记录，已清空 auth.json（防凭据串用）${C}\n" "$name"
     else
-        printf "${DGRAY}  🔑 该模型未托管 auth.json，保持现状${C}\n"
+        printf "${DGRAY}  🔑 %s 无 auth 记录${C}\n" "$name"
     fi
 
     # 5. 输出（掩码密钥）

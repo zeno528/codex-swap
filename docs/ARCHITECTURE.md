@@ -25,18 +25,19 @@ Codex 的 `config.toml` 是活的状态：使用中 App 会持续写入信任项
 config.toml ───────────────► model-states/deepseek.toml   （1:1 拷贝）
 config.toml ◄─────────────── model-states/gpt.toml        （存在则恢复）
                             （不存在 → models/gpt.toml 模板播种）
-auth.json ────────────────► model-states/<src>.auth.json  （仅源模型托管 auth 时）
+auth.json ────────────────► model-states/<src>.auth.json   （默认托管，无条件快照）
 auth.json ◄──────────────── model-states/<target>.auth.json（优先）
-                            models/<target>.auth.json（模板兜底，未托管则不碰）
+                            models/<target>.auth.json（模板兜底）
+                            （均无 → 清空 auth.json 防凭据串用）
 ```
 
 `use <name>` 五步：
 
 1. **识别源**：`Resolve-ActiveMarkers` 两阶段 — model+provider 匹配 → 多命中时按 token 指纹（前6|后6）精筛
-2. **存源状态**：`Save-ModelState` 原样拷贝；源模型托管 auth 时 `Save-ModelAuth` 同步快照（auth.json 不存在则删除旧快照记录空态）
+2. **存源状态**：`Save-ModelState` 原样拷贝；`Save-ModelAuth` 无条件同步 auth 快照（auth.json 不存在则删除旧快照记录空态）
 3. **取目标**：`Get-SwitchContent` 状态优先、模板兜底；auth 同理由 `Get-SwitchAuth` 解析
 4. **备份**：`Backup-Config` → `backups_model/`（config + auth 同时间戳，保留 5 份以 config 为准，过期时配套删除）
-5. **原子写**：config 与 auth.json 均 tmp → 校验非空 → Move 覆盖，失败删 tmp 回滚；auth 内容永不打印
+5. **原子写**：config 与 auth.json 均 tmp → 校验非空 → Move 覆盖，失败删 tmp 回滚；auth 内容永不打印；目标无 auth 记录时清空 auth.json（防凭据串用，切回时从快照还原）
 
 ## 模块结构
 

@@ -48,7 +48,7 @@ Linux/WSL2 下还可用快捷命令 `cxs`（等同 `codex-switch`）。
 - **状态** `~/.codex/model-states/<name>.toml`：模型最近一次使用时的完整配置，随使用自动演进
 - **切换**：切出时完整保存当前配置；切入时优先恢复目标模型状态，无状态才用模板播种
 - **备份**：每次切换前自动备份到 `~/.codex/backups_model/`（保留 5 份）
-- **登录凭据**：`auth.json` 走同一套机制 — 模板 `models/<name>.auth.json`（可选，需要独立登录的模型放这里）、状态 `model-states/<name>.auth.json`，切换时自动同步；未托管 auth 的模型保持 `auth.json` 现状
+- **登录凭据**：`auth.json` 走同一套机制 — 模板 `models/<name>.auth.json`（可选）、状态 `model-states/<name>.auth.json`。**默认托管**：切出时总是保存当前 auth 快照，切入时恢复目标快照；目标无任何 auth 记录时清空 `auth.json`（防凭据串用），切回原模型时从快照还原
 
 ## 📄 License
 
