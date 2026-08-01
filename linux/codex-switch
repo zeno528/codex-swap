@@ -196,7 +196,7 @@ cmd_list() {
     cur_model=$(get_field "$CONFIG" model)
     cur_provider=$(get_field "$CONFIG" model_provider)
 
-    printf "${CYAN}  🔍 可用模型模板${C}\n"
+    printf "${CYAN}  🔍 模型模板${C}\n"
     table_rule '╭' '┬' '╮' 4 6 14 26 14
     table_row '编号' '状态' '名称' '模型' '提供方' "$CYAN"
     table_rule '├' '┼' '┤' 4 6 14 26 14
@@ -211,13 +211,12 @@ cmd_list() {
         status=''
         color="$C"
         if [ "$model" = "$cur_model" ] && [ "$provider" = "$cur_provider" ]; then
-            status='●'
+            status='● 当前'
             color="$GREEN"
         fi
         table_row "$i" "$status" "$name" "${model:--}" "${provider:--}" "$color"
     done
     table_rule '╰' '┴' '╯' 4 6 14 26 14
-    printf "${DGRAY}  ● 当前激活${C}\n"
 }
 
 cmd_use() {
@@ -335,14 +334,13 @@ cmd_menu() {
     while true; do
         clear
         printf "${CYAN}  💻 codex-switch v%s · 模型切换${C}\n" "$VERSION"
-        printf "${DGRAY}  选择编号切换模型；u 更新，o 打开模板目录，回车刷新，q 退出${C}\n"
         echo ""
         cmd_list
         local files=("$MODELS_DIR"/*.toml) prompt
         if [ -f "${files[0]:-}" ]; then
-            prompt="  选择 (1-${#files[@]})，u 更新，o 打开目录，q 退出: "
+            prompt="  选择 [1-${#files[@]}] · u 更新 · o 模板目录 · Enter 刷新 · q 退出 › "
         else
-            prompt="  u 更新，o 打开目录，回车刷新，q 退出: "
+            prompt="  u 更新 · o 模板目录 · Enter 刷新 · q 退出 › "
         fi
         read -r -p "$prompt" choice || break
         case "$choice" in
