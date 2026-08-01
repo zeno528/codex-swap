@@ -69,11 +69,8 @@ Windows 分支                 Linux/WSL2 分支（独立实现，零共享代�
 
 ## 版本管理
 
-- 以下四处必须同步为同一版本（当前为 `0.2.0`）：
-  - `windows/src/codex-switch.psm1` 的 `$script:ScriptVersion`
-  - `windows/src/codex-switch.psd1` 的 `ModuleVersion`
-  - `linux/codex-switch` 的 `VERSION`
-  - git tag 的 `vX.Y.Z`
+- 唯一版本源：根目录 `VERSION`；三处源码为 `@VERSION@` 占位符，由 `scripts/build.sh` 构建时注入
+- 发版：递增 `VERSION`（pre-commit hook 自动）→ 全量测试 → commit → `git tag v$(cat VERSION)` → push
 - `update` 用 `Compare-Version` 做 semver 比对（支持 v 前缀、缺位补零）
 
 ## 数据安全

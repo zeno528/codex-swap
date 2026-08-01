@@ -20,18 +20,19 @@ docs/                 架构文档
 legacy/               v1 冻结代码，只读不维护
 ```
 
-## 版本管理（强制同步）
+## 版本管理（唯一版本源 + 构建注入）
 
-发版时四处必须同步，缺一不可：
+版本唯一来源：根目录 `VERSION` 文件。三处源码一律为 `@VERSION@` 占位符，由 `scripts/build.sh` 在构建/发布时注入：
 
-1. `windows/src/codex-switch.psm1` → `$script:ScriptVersion`
-2. `windows/src/codex-switch.psd1` → `ModuleVersion`
-3. `linux/codex-switch` → `VERSION="..."`
-4. git tag → `vX.Y.Z`
+1. `linux/codex-switch` → `VERSION="@VERSION@"`
+2. `windows/src/codex-switch.psm1` → `$script:ScriptVersion = '@VERSION@'`
+3. `windows/src/codex-switch.psd1` → `ModuleVersion = '@VERSION@'`
 
-发版流程：改版本 → 跑全量测试 → commit → `git tag vX.Y.Z && git push origin vX.Y.Z`（release workflow 自动构建双 zip + 创建 Release）。
-
-**pre-commit hook（`.githooks/pre-commit`，`core.hooksPath` 已指向 `.githooks`）**：每次提交自动递增 patch 并同步前 3 处版本文件（如 0.2.1 → 0.2.2）；patch/minor 到 99 进一位（0.0.99 → 0.1.0）。发版升 minor/major 时手动改版本号，hook 检测到工作区版本 ≠ HEAD 会跳过不重复递增；git tag 仍只在发版时手动打。
+- 改版本：只改 `VERSION` 一个文件；本地验证用 `scripts/build.sh --inject`
+- `pre-commit` hook（`.githooks/pre-commit`，`core.hooksPath` 指向 `.githooks`）：每次提交自动递增 `VERSION` 的 patch（99 进位，0.0.99 → 0.1.0）；检测到工作区 `VERSION` ≠ HEAD 时跳过（发版手动升 minor/major 不重复递增）
+- 构建/发版：`scripts/build.sh --package` 注入并产出双 zip；`scripts/verify-release.sh [tag] [zip...]` 校验 VERSION 格式、源码占位符状态、包内注入版本
+- 发版流程：递增 VERSION → 跑全量测试 → commit → `git tag v$(cat VERSION) && git push origin vX.Y.Z`（release workflow 自动构建双 zip + 创建 Release）
+- git tag 只在发版时手动打；源码永远不提交注入产物
 
 ## 开发规范（Windows 分支）
 

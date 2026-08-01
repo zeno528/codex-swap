@@ -9,7 +9,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.1"
+VERSION="@VERSION@"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 ASSET_NAME="codex-switch-linux.zip"

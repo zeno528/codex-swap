@@ -24,7 +24,12 @@ jobs:
           bash -n linux/install.sh
           bash -n linux/uninstall.sh
           bash -n scripts/verify-release.sh
-      - name: 校验双分支版本同步
+          bash -n scripts/build.sh
+      - name: 校验版本源与占位符状态
         run: scripts/verify-release.sh
+      - name: 构建双平台发行包
+        run: |
+          scripts/build.sh --package
+          test "$(unzip -p codex-switch-linux.zip codex-switch | sed -n 's/^VERSION="\([^"]*\)".*/\1/p')" = "$(tr -d '[:space:]' < VERSION)"
       - name: Linux 分支端到端切换测试（隔离 CODEX_HOME）
         run: scripts/test-linux.sh

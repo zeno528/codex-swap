@@ -27,6 +27,7 @@ jobs:
           bash -n linux/uninstall.sh
           bash -n scripts/verify-release.sh
           bash -n scripts/test-linux.sh
+          bash -n scripts/build.sh
           scripts/verify-release.sh "$GITHUB_REF_NAME"
       - name: Linux 分支端到端切换测试
         run: scripts/test-linux.sh
@@ -36,12 +37,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Build release zips
-        run: |
-          mkdir -p dist
-          cp -R windows/src windows/bin dist/
-          (cd dist && zip -qr ../codex-switch-windows.zip src bin)
-          (cd linux && zip -qr ../codex-switch-linux.zip codex-switch)
+      - name: Build release zips (注入 VERSION)
+        run: scripts/build.sh --package
       - name: Verify release packages
         run: scripts/verify-release.sh "$GITHUB_REF_NAME" codex-switch-windows.zip codex-switch-linux.zip
       - name: Create GitHub Release
