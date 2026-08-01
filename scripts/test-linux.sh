@@ -30,7 +30,7 @@ grep -q 'gpt-5.6-terra' "$CODEX_HOME/config.toml"
 
 printf '%s\n' 'trusted_project = "test-project"' >> "$CODEX_HOME/config.toml"
 output="$(bash linux/codex-switch use deepseek)"
-grep -q '已切换至 deepseek' <<< "$output"
+grep -q '已切换至 🐳 deepseek' <<< "$output"
 grep -q 'trusted_project = "test-project"' "$CODEX_HOME/model-states/gpt.toml"
 cmp "$test_root/deepseek-before.toml" "$CODEX_HOME/config.toml"
 test "$(find "$CODEX_HOME/backups_model" -name '*.toml' | wc -l)" -ge 2
@@ -89,10 +89,12 @@ grep -q '找不到资产 codex-switch-linux.zip' <<< "$output"
 wizard_home="$test_root/wizard"
 mkdir -p "$wizard_home"
 
-# 未装 codex：输出安装命令并退出
-output="$(CODEX_HOME="$wizard_home" bash linux/codex-switch menu </dev/null 2>&1)"
-grep -q '未检测到 codex CLI' <<< "$output"
-grep -q 'curl -fsSL https://chatgpt.com/codex/install.sh' <<< "$output"
+# 未装 codex：输出安装命令并退出（若 runner 预装 codex 则跳过安装提示断言）
+if ! command -v codex >/dev/null 2>&1; then
+    output="$(CODEX_HOME="$wizard_home" bash linux/codex-switch menu </dev/null 2>&1)"
+    grep -q '未检测到 codex CLI' <<< "$output"
+    grep -q 'curl -fsSL https://chatgpt.com/codex/install.sh' <<< "$output"
+fi
 
 # 内置 🐳 DeepSeek 模板：假 codex + 管道输入走完整向导
 cat > "$fake_bin/codex" <<'EOF'
