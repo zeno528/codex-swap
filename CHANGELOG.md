@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.32] - 2026-08-01
+
+- refactor(linux): 移除菜单 X 卸载入口（卸载走 install.sh --uninstall）
+
+
 ## [0.2.31] - 2026-08-01
 
 - refactor: 向导移除「跳过」选项，无效输入重试，q 退出
