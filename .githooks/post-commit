@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# post-commit: 自动把 prepare-commit-msg 写入的 CHANGELOG 条目并入本次提交
+# 背景：git 的提交树在 prepare-commit-msg 运行前已冻结，该阶段 git add 的文件
+#       不会进入本次提交（实测验证）。prepare-commit-msg 写入 CHANGELOG.md 后，
+#       本 hook 检测到未提交的 changelog 改动即 amend 并入。
+# 安全：--no-verify 跳过 pre-commit/commit-msg（防 VERSION 重复递增）；
+#       prepare-commit-msg 会重跑但幂等跳过；amend 后的 post-commit 检测无改动即退出，不循环
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+CL="$ROOT/CHANGELOG.md"
+
+# 无 changelog 未提交改动（非发布物提交或已并入）→ 无事可做
+if git diff --quiet -- "$CL" && git diff --cached --quiet -- "$CL"; then
+    exit 0
+fi
+
+msg="$(grep -m1 -v '^[[:space:]]*$' "$ROOT/.git/COMMIT_EDITMSG" 2>/dev/null | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' || true)"
+[ -n "$msg" ] || exit 0
+# 改动确实是 hook 本次写入的条目（消息已在 changelog 中）才 amend
+grep -Fq -- "- $msg" "$CL" || exit 0
+
+echo "post-commit: 自动 amend 并入 CHANGELOG 条目"
+git commit --amend --no-verify --no-edit -q
