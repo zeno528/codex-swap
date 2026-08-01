@@ -17,7 +17,8 @@
 windows/              Windows 分支（src/、bin/、安装器、卸载器、测试）
 linux/                Linux 分支（codex-switch 主脚本 / install.sh / uninstall.sh）
 docs/                 架构文档
-legacy/               v1 冻结代码，只读不维护
+scripts/              构建与校验脚本（build.sh / verify-release.sh / test-linux.sh）
+.githooks/            pre-commit（自动递增 VERSION）
 ```
 
 ## 版本管理（唯一版本源 + 构建注入）
@@ -69,6 +70,7 @@ legacy/               v1 冻结代码，只读不维护
 
 - `ci.yml`：Windows 跑 pwsh 测试 + Ubuntu 跑 bash 语法/冒烟
 - `release.yml`：main 上 VERSION 变更触发，测试通过后构建 `codex-switch-windows.zip`（windows/src+windows/bin）和 `codex-switch-linux.zip`（linux/codex-switch）双包并创建 Release
+- 修改 `.github/workflows/*.yml` 后必须运行 `actionlint`，并修复其报告的问题
 
 ## 安全规范
 
@@ -81,4 +83,4 @@ legacy/               v1 冻结代码，只读不维护
 
 - 消息格式：`type: 简述（中文）`，type 用 `feat` / `fix` / `chore` / `docs` / `refactor` / `test`
 - 提交前自查：`git diff` 无密钥、无本地数据文件（config.toml / *.zip / *.old / *.tmp）
-- CI 红 = 不推 tag；release 只在 CI 全绿后打 tag
+- CI 红 = 不发布；release workflow 在 CI 全绿后自动创建 tag
