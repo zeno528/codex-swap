@@ -92,7 +92,7 @@ mkdir -p "$wizard_home"
 # 未装 codex：输出安装命令并退出
 output="$(CODEX_HOME="$wizard_home" bash linux/codex-switch menu </dev/null 2>&1)"
 grep -q '未检测到 codex CLI' <<< "$output"
-grep -qE 'npm install -g @openai/codex|brew install --cask codex' <<< "$output"
+grep -q 'curl -fsSL https://chatgpt.com/codex/install.sh' <<< "$output"
 
 # 内置 🐳 DeepSeek 模板：假 codex + 管道输入走完整向导
 cat > "$fake_bin/codex" <<'EOF'

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.23] - 2026-08-01
+
+- fix(linux): 安装引导改用官方独立安装器，npm 仅作备选
+
+
 ## [0.2.22] - 2026-08-01
 
 - feat(linux): 首次使用初始化向导，内置 🐳 DeepSeek 模板与 models.json

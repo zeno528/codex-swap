@@ -9,7 +9,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.22"
+VERSION="0.2.23"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -557,32 +557,20 @@ JSON_EOF
 wizard_check_codex() {
     command -v codex >/dev/null 2>&1 && return 0
     printf "${YELLOW}  ⚠️ 未检测到 codex CLI，首次使用需要先安装${C}\n\n"
+    printf "  ${GREEN}安装命令（官方独立安装器，免 Node.js）：${C}\n"
+    printf "    %s\n" "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
     local os
     os="$(uname -s)"
     case "$os" in
         Darwin)
-            if command -v brew >/dev/null 2>&1; then
-                printf "  ${GREEN}安装命令：${C}%s\n" "brew install --cask codex"
-            elif command -v npm >/dev/null 2>&1; then
-                printf "  ${GREEN}安装命令：${C}%s\n" "npm install -g @openai/codex"
-            else
-                printf "  ${GREEN}请先安装 Node.js：${C}%s\n" "brew install node"
-                printf "  ${GREEN}然后安装 Codex：${C}%s\n" "npm install -g @openai/codex"
-            fi
+            command -v brew >/dev/null 2>&1 && printf "  ${GREEN}或用 Homebrew：${C}%s\n" "brew install --cask codex"
             ;;
         Linux)
-            if command -v npm >/dev/null 2>&1; then
-                printf "  ${GREEN}安装命令：${C}%s\n" "npm install -g @openai/codex"
-            elif [ -f /etc/os-release ] && grep -qiE '^(ID|ID_LIKE)="?(debian|ubuntu)' /etc/os-release; then
-                printf "  ${GREEN}请先安装 Node.js：${C}%s\n" "sudo apt install -y nodejs npm"
-                printf "  ${GREEN}然后安装 Codex：${C}%s\n" "npm install -g @openai/codex"
-            else
-                printf "  ${GREEN}请先安装 Node.js（https://nodejs.org），然后：${C}%s\n" "npm install -g @openai/codex"
-            fi
-            uname -r | grep -qi microsoft && printf "  ${DGRAY}（检测到 WSL 环境，同样使用上面的 npm 命令）${C}\n"
+            command -v npm >/dev/null 2>&1 && printf "  ${GREEN}或用 npm：${C}%s\n" "npm install -g @openai/codex"
+            uname -r | grep -qi microsoft && printf "  ${DGRAY}（检测到 WSL 环境，同样适用）${C}\n"
             ;;
-        *)  printf "  ${GREEN}安装命令：${C}%s\n" "npm install -g @openai/codex" ;;
     esac
+    printf "  ${DGRAY}注：npm 路径需要 Node.js 18+，apt 自带的 nodejs 版本过旧，请用 nvm/NodeSource 装新版${C}\n"
     printf "\n  ${DGRAY}安装完成后重新运行 codex-switch 即可进入向导${C}\n"
     return 1
 }
@@ -594,7 +582,8 @@ wizard_check_version() {
     [ -n "$ver" ] || return 0
     if ver_gt "$DEEPSEEK_MIN_CODEX" "$ver"; then
         printf "${YELLOW}  ⚠️ codex v%s 低于 DeepSeek V4 要求的最低版本 %s${C}\n" "$ver" "$DEEPSEEK_MIN_CODEX"
-        printf "  ${GREEN}升级命令：${C}%s\n" "npm install -g @openai/codex@latest"
+        printf "  ${GREEN}升级命令：${C}%s\n" "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
+        command -v npm >/dev/null 2>&1 && printf "  ${GREEN}或用 npm：${C}%s\n" "npm install -g @openai/codex@latest"
         read -r -p "  回车继续，q 退出升级 › " ans || true
         if [ "$ans" = q ] || [ "$ans" = Q ]; then
             return 1
