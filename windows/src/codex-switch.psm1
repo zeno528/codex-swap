@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.19'
+$script:ScriptVersion = '0.2.20'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-switch'
 $script:ReleaseAsset   = 'codex-switch-windows.zip'
@@ -900,6 +900,8 @@ Export-ModuleMember -Function @(
     'Resolve-ActiveName',
     'Save-ModelState',
     'Get-SwitchContent',
+    'Save-ModelAuth',
+    'Get-SwitchAuth',
     'Compare-Version',
     'Get-DisplayWidth',
     'Get-CodexHome'
