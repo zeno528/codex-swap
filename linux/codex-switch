@@ -137,6 +137,7 @@ display_width() {
               (code >= 0xfe30 && code <= 0xfe6f) ||
               (code >= 0xff01 && code <= 0xff60) ||
               (code >= 0xffe0 && code <= 0xffe6) ||
+              (code >= 0x2600 && code <= 0x27bf) ||
               (code >= 0x1f000) )); then
             width=$((width + 2))
         else
@@ -173,11 +174,19 @@ table_cell() {
     printf "${DGRAY}%*s${C}" "$((width - value_width))" ''
 }
 
+table_cell_center() {
+    local value="$1" width="$2" color="$3" value_width left right
+    value_width=$(display_width "$value")
+    left=$(((width - value_width) / 2))
+    right=$((width - value_width - left))
+    printf "${DGRAY}│%*s${C}${color}%s${C}${DGRAY}%*s${C}" "$left" '' "$value" "$right" ''
+}
+
 table_row() {
     local num="$1" status="$2" name="$3" model="$4" provider="$5" color="$6"
     printf '  '
     table_cell "$num" 4 "$color"
-    table_cell "$status" 6 "$color"
+    table_cell_center "$status" 6 "$color"
     table_cell "$name" 14 "$color"
     table_cell "$model" 26 "$color"
     table_cell "$provider" 14 "$color"
@@ -212,7 +221,7 @@ cmd_list() {
         status=''
         color="$C"
         if [ "$model" = "$cur_model" ] && [ "$provider" = "$cur_provider" ]; then
-            status='● 当前'
+            status='✅'
             color="$GREEN"
         fi
         table_row "$i" "$status" "$name" "${model:--}" "${provider:--}" "$color"
@@ -344,9 +353,11 @@ cmd_menu() {
         cmd_list
         local files=("$MODELS_DIR"/*.toml) prompt
         if [ -f "${files[0]:-}" ]; then
-            prompt="  选择 [1-${#files[@]}] · u 更新 · o 模板目录 · Enter 刷新 · q 退出 › "
+            printf "${DGRAY}  操作：U 更新 · O 打开模板目录 · Enter 刷新 · Q 退出${C}\n"
+            echo ""
+            prompt="  选择模型 [1-${#files[@]}] › "
         else
-            prompt="  u 更新 · o 模板目录 · Enter 刷新 · q 退出 › "
+            prompt="  操作：U 更新 · O 打开模板目录 · Enter 刷新 · Q 退出 › "
         fi
         read -r -p "$prompt" choice || break
         case "$choice" in
