@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.27] - 2026-08-01
+
+- feat(windows): 首次使用初始化向导，内置 🐳 DeepSeek 模板与官方 models.json（含系统提示词）
+
+
 ## [0.2.26] - 2026-08-01
 
 - feat(linux): models.json 升级为 DeepSeek 官方完整版（含系统提示词）
