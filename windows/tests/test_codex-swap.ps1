@@ -168,7 +168,7 @@ Assert-True ($moduleText -match '下载资产版本 v\$packageVersion 与 VERSIO
 Assert-True ($moduleText -notmatch "Copy-Item \(Join-Path \$extract '\*'\)") '替换用显式建目录+逐项复制（避免 powershell/powershell#27478）'
 Assert-True ($moduleText -notmatch 'Rename-Item \$root \$old') '更新不再重命名安装目录（运行中进程会锁定目录）'
 Assert-True ($moduleText -match "Copy-Item \(Join-Path \`$extract 'src\\\*'\)") '更新用通配符逐项覆盖 src/'
-Assert-True ($moduleText -match '📋 当前配置 · \$lineCount 行') '切换预览标题显示配置行数'
+Assert-True ($moduleText -match '共 \$lineCount 行') '切换输出标题显示配置行数'
 
 Write-Host "`n=== Test 11: Save-ModelAuth 保存/覆盖/删除空态 ===" -ForegroundColor Cyan
 $tmpAuth = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
@@ -388,6 +388,9 @@ try {
     [System.IO.File]::WriteAllText($cfgN2, $baseTpl + "`n" + '[model_providers.custom]' + "`n" + 'name = "openai"', [System.Text.UTF8Encoding]::new($false))
     $markers = Resolve-ActiveMarkers -Files @($n1, $n2) -ConfigPath $cfgN2
     Assert-True ($markers[$n1] -eq 'none' -and $markers[$n2] -eq 'none') 'provider name 大小写敏感（OpenAI ≠ openai）'
+    $secContent = $baseTpl + "`n" + '[model_providers.custom]' + "`n" + 'name = "DeepSeek"' + "`n" + 'base_url = "https://api.deepseek.com/"'
+    Assert-True ((Get-TomlSectionValue -Content $secContent -Section 'model_providers.custom' -Key 'name') -eq 'DeepSeek') '提取段内 name'
+    Assert-True ((Get-TomlSectionValue -Content $secContent -Section 'model_providers.custom' -Key 'base_url') -eq 'https://api.deepseek.com/') '提取段内 base_url'
 
     # 大小写敏感：model 大小写不同不匹配
     $cu = Join-Path $tmpB 'upper.toml'

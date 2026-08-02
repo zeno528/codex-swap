@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.72"
+VERSION="0.2.73"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -82,6 +82,32 @@ get_provider_name() {
             exit
         }
     ' "$file"
+}
+
+# === 工具：提取 [model_providers.<id>] 段内指定字段（如 base_url） ===
+get_provider_field() {
+    local file="$1" provider="$2" key="$3"
+    awk -v p="$provider" -v k="$key" '
+        $0 ~ "^\\[model_providers\\." p "\\]$" { insec=1; next }
+        insec && $0 ~ /^\[/ { insec=0 }
+        insec && $0 ~ "^[[:space:]]*" k "[[:space:]]*=" {
+            line=$0
+            sub(/^[^=]*=[[:space:]]*/, "", line)
+            gsub(/"/, "", line)
+            print line
+            exit
+        }
+    ' "$file"
+}
+
+# === 工具：密钥掩码显示（前6 + **** + 后6，短 token 整串） ===
+mask_token() {
+    local t="$1"
+    if [ "${#t}" -ge 12 ]; then
+        echo "${t:0:6}****${t: -6}"
+    else
+        echo "$t"
+    fi
 }
 
 # === 工具：semver 比较 v1 > v2 ? ===
@@ -203,7 +229,6 @@ save_model_auth() {
     mkdir -p "$STATE_DIR"
     if [ -f "$AUTH_FILE" ]; then
         cp "$AUTH_FILE" "$STATE_DIR/$name.auth.json"
-        printf "${DGRAY}  🔑 已保存 auth 状态：%s${C}\n" "$name"
     else
         rm -f "$STATE_DIR/$name.auth.json"
     fi
@@ -469,16 +494,21 @@ cmd_use() {
     [ -f "$tpl" ] || fail "模板不存在: $tpl"
     [ -f "$CONFIG" ] || fail "config 不存在: $CONFIG"
 
+    # 0. 切换前收集旧配置信息（切换后 CONFIG 会被覆盖）
+    local old_model old_provider old_pname old_auth=0 old_lines
+    old_model=$(get_field "$CONFIG" model)
+    old_provider=$(effective_provider "$(get_field "$CONFIG" model_provider)")
+    old_pname=$(get_provider_name "$CONFIG")
+    [ -f "$AUTH_FILE" ] && old_auth=1
+    old_lines=$(wc -l < "$CONFIG" | tr -d '[:space:]')
+
     # 1. 切出：保存源模型最新状态
     local src
     src=$(resolve_active)
     if [ -n "$src" ]; then
         mkdir -p "$STATE_DIR"
         cp "$CONFIG" "$STATE_DIR/$src.toml"
-        printf "${DGRAY}  💾 已保存状态：%s${C}\n" "$src"
         save_model_auth "$src"
-    else
-        warn "  当前配置未匹配模板，未保存状态"
     fi
     [ "$src" = "$name" ] && { say "  当前已是 $name，无需切换"; return; }
 
@@ -499,28 +529,66 @@ cmd_use() {
         cp "$auth_src" "$AUTH_FILE.tmp"
         [ -s "$AUTH_FILE.tmp" ] || fail "原子写校验失败：auth 临时文件为空"
         mv "$AUTH_FILE.tmp" "$AUTH_FILE"
-        printf "${GREEN}  🔑 auth.json 已同步（%s）${C}\n" "$name"
     elif [ -f "$AUTH_FILE" ]; then
         rm -f "$AUTH_FILE"
-        printf "${YELLOW}  🔑 %s 无 auth 记录，已清空 auth.json（防凭据串用）${C}\n" "$name"
-    else
-        printf "${DGRAY}  🔑 %s 无 auth 记录${C}\n" "$name"
     fi
 
-    # 5. 输出（掩码密钥）
-    local lines
-    lines=$(wc -l < "$CONFIG" | tr -d '[:space:]')
-    printf "${GREEN}  ✅ 已切换至 %s${C}\n" "$name"
-    printf "${DGRAY}  来源：%s${C}\n\n" "$mode"
-    printf "${BOLD_CYAN}  📋 当前配置 · %s 行${C}\n" "$lines"
-    local n=0
-    while IFS= read -r line && [ "$n" -lt 15 ]; do
-        n=$((n+1))
-        [ -z "$line" ] && continue
-        [[ "$line" == \[* ]] && break
-        echo "  $(mask_line "$line")"
-    done < "$CONFIG"
-    printf "${DGRAY}\n  ℹ️ 重启 Codex 后生效${C}\n"
+    # 5. 输出：旧配置快照 + 新配置加载（两块，虚线分隔）
+    local new_lines new_model new_provider new_pname new_effort new_base new_catalog new_token desc
+    new_lines=$(wc -l < "$content" | tr -d '[:space:]')
+    new_model=$(get_field "$content" model)
+    new_provider=$(effective_provider "$(get_field "$content" model_provider)")
+    new_pname=$(get_provider_name "$content")
+    new_effort=$(get_field "$content" model_reasoning_effort)
+    new_base=$(get_provider_field "$content" "$new_provider" base_url)
+    new_catalog=$(get_field "$content" model_catalog_json)
+    new_token=$(get_field "$content" experimental_bearer_token)
+    desc=""
+    [ -f "$DESC_DIR/$name.desc" ] && desc=$(head -n1 "$DESC_DIR/$name.desc")
+
+    printf "  ${BOLD_CYAN}💾 旧配置快照${C}"
+    if [ -n "$src" ]; then
+        printf " · ${CYAN}%s${C}" "$src"
+    else
+        printf " · ${YELLOW}未匹配模板${C}"
+    fi
+    printf " · 共 %s 行" "$old_lines"
+    if [ -n "$src" ] && [ "$old_auth" -eq 1 ]; then
+        printf " · ${GREEN}已保存 🔑${C}"
+    fi
+    printf "\n"
+    [ -n "$old_model" ] && printf "     model = \"%s\"\n" "$old_model"
+    if [ -n "$old_provider" ]; then
+        printf "     model_provider = \"%s\"" "$old_provider"
+        [ -n "$old_pname" ] && printf " · %s" "$old_pname"
+        printf "\n"
+    fi
+    if [ -n "$src" ]; then
+        printf "     快照 = %s\n" "$STATE_DIR/$src.toml"
+        [ "$old_auth" -eq 1 ] && printf "     登录 = %s\n" "$STATE_DIR/$src.auth.json"
+    fi
+    printf "\n"
+    wizard_divider
+    printf "\n"
+
+    printf "  ${GREEN}✅ 新配置加载${C} · ${CYAN}%s${C} · 共 %s 行 · ${DGRAY}%s${C}\n" "$name" "$new_lines" "$mode"
+    [ -n "$new_model" ] && printf "     model = \"%s\"\n" "$new_model"
+    if [ -n "$new_provider" ]; then
+        printf "     model_provider = \"%s\"" "$new_provider"
+        [ -n "$new_pname" ] && printf " · %s" "$new_pname"
+        printf "\n"
+    fi
+    [ -n "$new_effort" ] && printf "     model_reasoning_effort = \"%s\"\n" "$new_effort"
+    [ -n "$new_base" ] && printf "     base_url = \"%s\"\n" "$new_base"
+    [ -n "$new_token" ] && printf "     token = %s\n" "$(mask_token "$new_token")"
+    [ -n "$new_catalog" ] && printf "     model_catalog_json = \"%s\"\n" "$new_catalog"
+    if [ -n "$auth_src" ]; then
+        printf "     登录 = 已恢复 🔑\n"
+    else
+        printf "     登录 = 无记录\n"
+    fi
+    [ -n "$desc" ] && printf "     描述 = %s\n" "$desc"
+    printf "\n  ${DGRAY}ℹ️ 重启 Codex 后生效${C}\n"
 }
 
 cmd_update() {

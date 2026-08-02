@@ -102,15 +102,15 @@ output="$(CODEX_HOME="$edge2_home" bash linux/codex-swap list)"
 if grep -q '✅' <<< "$output"; then exit 1; fi
 
 output="$(bash linux/codex-swap use gpt)"
-grep -q '已切换至 gpt' <<< "$output"
-grep -q '📋 当前配置 · 4 行' <<< "$output"
+grep -q '新配置加载' <<< "$output"
+grep -q '共 4 行' <<< "$output"
 ! grep -q '⚠️' <<< "$output"
 cmp "$test_root/deepseek-before.toml" "$CODEX_HOME/model-states/deepseek.toml"
 grep -q 'gpt-5.6-terra' "$CODEX_HOME/config.toml"
 
 printf '%s\n' 'trusted_project = "test-project"' >> "$CODEX_HOME/config.toml"
 output="$(bash linux/codex-swap use deepseek)"
-grep -q '已切换至 deepseek' <<< "$output"
+grep -q '新配置加载' <<< "$output"
 grep -q 'trusted_project = "test-project"' "$CODEX_HOME/model-states/gpt.toml"
 cmp "$test_root/deepseek-before.toml" "$CODEX_HOME/config.toml"
 
@@ -120,28 +120,28 @@ printf '%s\n' '{ "token": "test-token-gpt-auth" }' > "$CODEX_HOME/models/gpt.aut
 printf '%s\n' '{ "token": "test-token-deepseek-auth" }' > "$CODEX_HOME/auth.json"
 
 output="$(bash linux/codex-swap use gpt)"
-grep -q '已切换至 gpt' <<< "$output"
-grep -q 'auth.json 已同步（gpt）' <<< "$output"
+grep -q '新配置加载' <<< "$output"
+grep -q '登录 = 已恢复' <<< "$output"
 grep -q 'test-token-gpt-auth' "$CODEX_HOME/auth.json"
 test ! -f "$CODEX_HOME/model-states/gpt.auth.json"
 
 printf '%s\n' '{ "token": "test-token-gpt-auth-grown" }' > "$CODEX_HOME/auth.json"
 output="$(bash linux/codex-swap use deepseek)"
-grep -q '已保存 auth 状态：gpt' <<< "$output"
+grep -q '已保存' <<< "$output"
 grep -q 'test-token-gpt-auth-grown' "$CODEX_HOME/model-states/gpt.auth.json"
 grep -q 'test-token-deepseek-auth' "$CODEX_HOME/auth.json"
 
 output="$(bash linux/codex-swap use gpt)"
-grep -q 'auth.json 已同步（gpt）' <<< "$output"
+grep -q '登录 = 已恢复' <<< "$output"
 grep -q 'test-token-gpt-auth-grown' "$CODEX_HOME/auth.json"
 
 # 无 auth 记录的模型：切入清空防串用；切回时 auth 从快照恢复
 printf '%s\n' 'model = "claude-4"' 'model_provider = "anthropic"' > "$CODEX_HOME/models/claude.toml"
 output="$(bash linux/codex-swap use claude)"
-grep -q '无 auth 记录，已清空 auth.json' <<< "$output"
+grep -q '登录 = 无记录' <<< "$output"
 test ! -f "$CODEX_HOME/auth.json"
 output="$(bash linux/codex-swap use gpt)"
-grep -q 'auth.json 已同步（gpt）' <<< "$output"
+grep -q '登录 = 已恢复' <<< "$output"
 grep -q 'test-token-gpt-auth-grown' "$CODEX_HOME/auth.json"
 output="$(printf '1\nq\nq\n' | bash linux/codex-swap 2>&1)"
 test "$(grep -o '模型切换' <<< "$output" | wc -l)" -eq 1

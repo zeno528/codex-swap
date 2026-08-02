@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.72'
+$script:ScriptVersion = '0.2.73'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -115,6 +115,23 @@ function Get-ProviderDisplayName {
         if ($t -match '^\[model_providers\.[^\]]+\]$') { $inSection = $true; continue }
         if ($inSection -and $t -match '^name\s*=\s*"(.*)"\s*$') { return $Matches[1] }
         if ($inSection -and $t -match '^\[') { $inSection = $false }
+    }
+    return ''
+}
+
+# === 工具：从 TOML 内容提取指定段内字段值（大小写敏感，如 [model_providers.custom] 的 base_url） ===
+function Get-TomlSectionValue {
+    param(
+        [Parameter(Mandatory)] [string]$Content,
+        [Parameter(Mandatory)] [string]$Section,
+        [Parameter(Mandatory)] [string]$Key
+    )
+    $inSection = $false
+    foreach ($line in ($Content -split [char]10)) {
+        $t = $line.Trim()
+        if ($t -ceq "[$Section]") { $inSection = $true; continue }
+        if ($inSection -and $t -match '^\[') { $inSection = $false }
+        if ($inSection -and $t -match '^' + [regex]::Escape($Key) + '\s*=\s*"(.*)"\s*$') { return $Matches[1] }
     }
     return ''
 }
@@ -741,18 +758,19 @@ function Invoke-Use {
         throw "模板不存在: $tplPath"
     }
 
+    # 0.5 切换前收集旧配置信息（切换后 ConfigPath 会被覆盖）
+    $oldContent = [System.IO.File]::ReadAllText($script:ConfigPath, [System.Text.UTF8Encoding]::new($false))
+    $oldFp = Get-CurrentFingerprint -ConfigPath $script:ConfigPath
+    $oldPname = Get-ProviderDisplayName -Path $script:ConfigPath
+    $oldAuthExists = [System.IO.File]::Exists($script:AuthPath)
+    $oldLines = ([regex]::Matches($oldContent, '\n')).Count
+
     # 1. 切出：找出当前 config 对应的源模型，把最新状态完整存下
     $files = [System.IO.Directory]::GetFiles($script:ModelsDir, '*.toml')
     $sourceName = Resolve-ActiveName -Files $files -ConfigPath $script:ConfigPath
     if ($null -ne $sourceName) {
         Save-ModelState -Name $sourceName -ConfigPath $script:ConfigPath -StateDir $script:StateDir
-        Write-ColorOutput "  💾 已保存状态：$sourceName" DarkGray
         Save-ModelAuth -Name $sourceName -AuthPath $script:AuthPath -StateDir $script:StateDir
-        if ([System.IO.File]::Exists($script:AuthPath)) {
-            Write-ColorOutput "  🔑 已保存 auth 状态：$sourceName" DarkGray
-        }
-    } else {
-        Write-ColorOutput "  ⚠️ 当前配置未匹配模板，未保存状态" Yellow
     }
 
     # 2. 目标已激活：无需切换
@@ -794,38 +812,92 @@ function Invoke-Use {
             if ([System.IO.File]::Exists($authTmp)) { [System.IO.File]::Delete($authTmp) }
             throw
         }
-        Write-ColorOutput "  🔑 auth.json 已同步（$Name）" Green
     } elseif ([System.IO.File]::Exists($script:AuthPath)) {
         [System.IO.File]::Delete($script:AuthPath)
-        Write-ColorOutput "  🔑 $Name 无 auth 记录，已清空 auth.json（防凭据串用）" Yellow
-    } else {
-        Write-ColorOutput "  🔑 $Name 无 auth 记录" DarkGray
     }
 
-    # 6. 输出（掩码密钥）：✅ 已切换 + 来源 + 📋 当前配置（与 Linux cmd_use 一致）
+    # 6. 输出：旧配置快照 + 新配置加载（两块，虚线分隔，与 Linux cmd_use 一致）
     $mode = if ($switch.Source -eq 'state') { '状态恢复' } else { '模板初始化' }
     $lineCount = [regex]::Matches($newContent, '\n').Count
-    Write-ColorOutput "  ✅ 已切换至 $Name" Green
-    Write-ColorOutput "  来源：$mode" DarkGray
-    Write-ColorOutput "" White
-    Write-ColorOutput "  📋 当前配置 · $lineCount 行" Cyan
-    $n = 0
+    $newModel = ''; $newProvider = ''; $newEffort = ''; $newCatalog = ''; $newToken = ''
     foreach ($line in ($newContent -split [char]10)) {
-        if ($n -ge 15) { break }
-        $n++
         $t = $line.Trim()
-        if ($t -eq '') { continue }
-        if ($t -match '^\[') { break }
-        if ($t -match '(token|key|password|secret)\s*=\s*"(.+)"') {
-            $val = $Matches[2]
-            if ($val.Length -ge 16) {
-                $masked = $val.Substring(0, 6) + '****' + $val.Substring($val.Length - 6)
-                $t = $t -replace [regex]::Escape($val), $masked
-            }
-        }
-        Write-ColorOutput "  $t" White
+        if ($t -match '^model\s*=\s*"(.*)"\s*$')                            { $newModel = $Matches[1] }
+        elseif ($t -match '^model_provider\s*=\s*"(.*)"\s*$')              { $newProvider = $Matches[1] }
+        elseif ($t -match '^model_reasoning_effort\s*=\s*"(.*)"\s*$')      { $newEffort = $Matches[1] }
+        elseif ($t -match '^model_catalog_json\s*=\s*"(.*)"\s*$')          { $newCatalog = $Matches[1] }
+        elseif ($t -match '^experimental_bearer_token\s*=\s*"(.*)"\s*$')   { $newToken = $Matches[1] }
     }
-    Write-ColorOutput ""
+    $newProviderEff = Get-EffectiveProvider $newProvider
+    $newPname = Get-TomlSectionValue -Content $newContent -Section "model_providers.$newProviderEff" -Key 'name'
+    $newBase = Get-TomlSectionValue -Content $newContent -Section "model_providers.$newProviderEff" -Key 'base_url'
+    $newDesc = Get-TemplateDescription -Name $Name -DescriptionsDir $script:DescriptionsDir
+
+    # 旧配置快照块
+    Write-ColorOutput "  💾 旧配置快照" Cyan -NoNewline
+    if ($null -ne $sourceName) {
+        Write-ColorOutput " · $sourceName" Cyan -NoNewline
+    } else {
+        Write-ColorOutput " · 未匹配模板" Yellow -NoNewline
+    }
+    Write-ColorOutput " · 共 $oldLines 行" White -NoNewline
+    if ($null -ne $sourceName -and $oldAuthExists) {
+        Write-ColorOutput " · 已保存 🔑" Green
+    }
+    Write-ColorOutput "" White
+    if (-not [string]::IsNullOrWhiteSpace($oldFp.Model)) {
+        Write-ColorOutput "     model = `"$($oldFp.Model)`"" White
+    }
+    if (-not [string]::IsNullOrWhiteSpace($oldFp.Provider)) {
+        $oldProviderLine = "     model_provider = `"$($oldFp.Provider)`""
+        if (-not [string]::IsNullOrWhiteSpace($oldPname)) { $oldProviderLine += " · $oldPname" }
+        Write-ColorOutput $oldProviderLine White
+    }
+    if ($null -ne $sourceName) {
+        Write-ColorOutput "     快照 = $(Join-Path $script:StateDir "$sourceName.toml")" White
+        if ($oldAuthExists) {
+            Write-ColorOutput "     登录 = $(Join-Path $script:StateDir "$sourceName.auth.json")" White
+        }
+    }
+    Write-ColorOutput "" White
+    Write-WizardDivider
+    Write-ColorOutput "" White
+
+    # 新配置加载块
+    Write-ColorOutput "  ✅ 新配置加载" Green -NoNewline
+    Write-ColorOutput " · $Name" Cyan -NoNewline
+    Write-ColorOutput " · 共 $lineCount 行 · " White -NoNewline
+    Write-ColorOutput $mode DarkGray
+    if (-not [string]::IsNullOrWhiteSpace($newModel)) {
+        Write-ColorOutput "     model = `"$newModel`"" White
+    }
+    if (-not [string]::IsNullOrWhiteSpace($newProviderEff)) {
+        $newProviderLine = "     model_provider = `"$newProviderEff`""
+        if (-not [string]::IsNullOrWhiteSpace($newPname)) { $newProviderLine += " · $newPname" }
+        Write-ColorOutput $newProviderLine White
+    }
+    if (-not [string]::IsNullOrWhiteSpace($newEffort)) {
+        Write-ColorOutput "     model_reasoning_effort = `"$newEffort`"" White
+    }
+    if (-not [string]::IsNullOrWhiteSpace($newBase)) {
+        Write-ColorOutput "     base_url = `"$newBase`"" White
+    }
+    if (-not [string]::IsNullOrWhiteSpace($newToken)) {
+        $masked = if ($newToken.Length -ge 12) { $newToken.Substring(0, 6) + '****' + $newToken.Substring($newToken.Length - 6) } else { $newToken }
+        Write-ColorOutput "     token = $masked" White
+    }
+    if (-not [string]::IsNullOrWhiteSpace($newCatalog)) {
+        Write-ColorOutput "     model_catalog_json = `"$newCatalog`"" White
+    }
+    if ($null -ne $auth.Source) {
+        Write-ColorOutput "     登录 = 已恢复 🔑" White
+    } else {
+        Write-ColorOutput "     登录 = 无记录" White
+    }
+    if (-not [string]::IsNullOrWhiteSpace($newDesc)) {
+        Write-ColorOutput "     描述 = $newDesc" White
+    }
+    Write-ColorOutput "" White
     Write-ColorOutput "  ℹ️ 重启 Codex 后生效" DarkGray
 }
 
@@ -1586,6 +1658,7 @@ Export-ModuleMember -Function @(
     'Set-TemplateDescription',
     'Get-ConfigDistance',
     'Get-ProviderDisplayName',
+    'Get-TomlSectionValue',
     'Get-TemplateFingerprint',
     'Get-CurrentFingerprint',
     'Resolve-ActiveMarkers',
