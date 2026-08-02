@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 校验版本一致性；传入 tag 时同时校验发行包结构。
+# 校验版本一致性；传入 tag 时同时校验两份发行包结构。
 # 版本唯一来源：根目录 VERSION 文件；三处源码为 @VERSION@ 占位符，由 scripts/build.sh 构建时注入。
 set -euo pipefail
 
@@ -25,19 +25,19 @@ fi
 
 if [ "$#" -eq 3 ]; then
     windows_zip="$2"
-    linux_zip="$3"
+    linux_macos_zip="$3"
     [ -f "$windows_zip" ] || fail "缺少 Windows 发行包: $windows_zip"
-    [ -f "$linux_zip" ] || fail "缺少 Linux 发行包: $linux_zip"
+    [ -f "$linux_macos_zip" ] || fail "缺少 Linux/macOS 发行包: $linux_macos_zip"
 
     unzip -Z1 "$windows_zip" | grep -Fxq 'src/codex-swap.psm1' || fail 'Windows 发行包缺少 src/codex-swap.psm1'
     unzip -Z1 "$windows_zip" | grep -Fxq 'bin/codex-swap.cmd' || fail 'Windows 发行包缺少 bin/codex-swap.cmd'
-    unzip -Z1 "$linux_zip" | grep -Fxq 'codex-swap' || fail 'Linux 发行包缺少 codex-swap'
+    unzip -Z1 "$linux_macos_zip" | grep -Fxq 'codex-swap' || fail 'Linux/macOS 发行包缺少 codex-swap'
 
     # 包内版本必须已注入且与 VERSION 一致
     psm1_ver="$(unzip -p "$windows_zip" src/codex-swap.psm1 | sed -n "s/^\$script:ScriptVersion[[:space:]]*=[[:space:]]*'\([^']*\)'.*/\1/p")"
     psd1_ver="$(unzip -p "$windows_zip" src/codex-swap.psd1 | sed -n "s/^[[:space:]]*ModuleVersion[[:space:]]*=[[:space:]]*'\([^']*\)'.*/\1/p")"
-    linux_ver="$(unzip -p "$linux_zip" codex-swap | sed -n 's/^VERSION="\([^"]*\)".*/\1/p')"
-    for v in "$psm1_ver" "$psd1_ver" "$linux_ver"; do
+    linux_macos_ver="$(unzip -p "$linux_macos_zip" codex-swap | sed -n 's/^VERSION="\([^"]*\)".*/\1/p')"
+    for v in "$psm1_ver" "$psd1_ver" "$linux_macos_ver"; do
         [ "$v" = "$version" ] || fail "发行包版本 $v 与 VERSION $version 不一致"
     done
 fi

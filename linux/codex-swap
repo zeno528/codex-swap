@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# codex-swap (Linux/WSL2 独立分支)
+# codex-swap (Linux/macOS 独立分支)
 # 纯 bash 实现，零 pwsh/Windows 依赖。原生工具: grep/sed/awk/curl/unzip
 # 机制与 Windows 版一致：模板播种 + 状态恢复
 #   ~/.codex/models/<name>.toml        模板（首次播种）
@@ -8,11 +8,11 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.55"
+VERSION="0.2.56"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
-ASSET_NAME="codex-swap-linux.zip"
+ASSET_NAME="codex-swap-linux-macos.zip"
 API_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
 
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
@@ -60,6 +60,32 @@ ver_gt() {
         for(i=1;i<=3;i++){ x=A[i]+0; y=B[i]+0; if(x>y) exit 0; if(x<y) exit 1 }
         exit 1
     }'
+}
+
+# === 工具：解析脚本真实路径（macOS BSD readlink 无 -f，纯 bash 实现） ===
+self_path() {
+    local p="$1" dir link
+    while [ -L "$p" ]; do
+        link="$(readlink "$p")"
+        case "$link" in
+            /*) p="$link" ;;
+            *) p="$(dirname "$p")/$link" ;;
+        esac
+    done
+    dir="$(cd "$(dirname "$p")" && pwd)"
+    printf '%s/%s\n' "$dir" "$(basename "$p")"
+}
+
+# === 工具：打开目录（macOS 用 open，Linux 用 xdg-open，均缺失时提示手动） ===
+open_dir() {
+    local dir="$1"
+    if command -v open >/dev/null 2>&1; then
+        open "$dir" >/dev/null 2>&1 || echo "  手动打开: $dir"
+    elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$dir" >/dev/null 2>&1 || echo "  手动打开: $dir"
+    else
+        echo "  手动打开: $dir"
+    fi
 }
 
 # === 工具：掩码密钥行 ===
@@ -364,7 +390,7 @@ cmd_update() {
         printf "${GREEN}  ✅ 已是最新版本 v%s${C}\n" "$VERSION"; return
     fi
     printf "${YELLOW}  🚀 发现新版本 · v%s${C}\n" "$source_version"
-    url=$(printf '%s' "$json" | { grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*codex-swap-linux\.zip"' || true; } | head -n1 | sed 's/.*"\(http[^"]*\)".*/\1/')
+    url=$(printf '%s' "$json" | { grep -o "\"browser_download_url\"[[:space:]]*:[[:space:]]*\"[^\"]*${ASSET_NAME}\"" || true; } | head -n1 | sed 's/.*"\(http[^"]*\)".*/\1/')
     [ -n "$url" ] || fail "找不到资产 $ASSET_NAME"
 
     local tmp; tmp=$(mktemp -d)
@@ -379,7 +405,7 @@ cmd_update() {
     [ "$package_version" = "$source_version" ] || fail "下载资产版本 v$package_version 与 VERSION v$source_version 不一致"
 
     local self
-    self="$(readlink -f "$0")"
+    self="$(self_path "$0")"
     cp "$new" "$self.tmp"
     chmod +x "$self.tmp"
     mv "$self.tmp" "$self"
@@ -414,7 +440,7 @@ show_help() {
 # === 卸载：删除本机安装（自身启动器 + sw 快捷命令），数据目录 ~/.codex 不动 ===
 cmd_uninstall() {
     local self shortcut
-    self="$(readlink -f "$0")"
+    self="$(self_path "$0")"
     shortcut="$(dirname "$self")/sw"
     printf "${YELLOW}  🗑️  将删除：${C}\n"
     printf "${DGRAY}    1. %s${C}\n" "$self"
@@ -690,8 +716,8 @@ wizard_check_version() {
 # === 向导：打开目录引导导入用户自己的模板 ===
 wizard_import_template() {
     mkdir -p "$MODELS_DIR"
-    if command -v xdg-open >/dev/null 2>&1; then
-        xdg-open "$MODELS_DIR" >/dev/null 2>&1 || true
+    if command -v open >/dev/null 2>&1 || command -v xdg-open >/dev/null 2>&1; then
+        open_dir "$MODELS_DIR"
         printf "  ${CYAN}已打开模板目录：${C}%s\n" "$MODELS_DIR"
     else
         printf "  ${CYAN}请打开模板目录：${C}%s\n" "$MODELS_DIR"
@@ -821,12 +847,12 @@ cmd_menu() {
         case "$choice" in
             q|Q) return ;;
             "" ) continue ;;
-            o|O) xdg-open "$MODELS_DIR" >/dev/null 2>&1 || echo "  手动打开: $MODELS_DIR"; continue ;;
+            o|O) open_dir "$MODELS_DIR"; continue ;;
             u|U)
                 cmd_update
                 if [ "$UPDATED" = true ]; then
                     wait_for_menu "  按回车重新加载菜单，q 退出 › " || return 0
-                    exec bash "$(readlink -f "$0")"
+                    exec bash "$(self_path "$0")"
                 fi
                 wait_for_menu "  按回车返回菜单，q 退出 › " || return 0
                 continue

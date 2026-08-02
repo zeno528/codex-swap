@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# codex-swap 安装器 (Linux/WSL2 独立分支)
+# codex-swap 安装器 (Linux/macOS 独立分支)
 # 纯 bash + 原生工具：curl / grep / sed / unzip，零 pwsh / Windows 依赖
 #
 # 用法：
@@ -10,7 +10,7 @@ set -euo pipefail
 
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
-ASSET_NAME="codex-swap-linux.zip"
+ASSET_NAME="codex-swap-linux-macos.zip"
 BIN_DIR="$HOME/.local/bin"
 LAUNCHER="$BIN_DIR/codex-swap"
 SHORTCUT="$BIN_DIR/sw"
@@ -32,7 +32,7 @@ fi
 
 # ---------- 前置检查 ----------
 for tool in curl unzip; do
-    command -v "$tool" >/dev/null 2>&1 || fail "缺少 $tool，请先安装（sudo apt install $tool）"
+    command -v "$tool" >/dev/null 2>&1 || fail "缺少 $tool，请先安装依赖"
 done
 
 # ---------- 获取 Release ----------
@@ -44,7 +44,7 @@ else
 fi
 JSON="$(curl -fsSL -H 'User-Agent: codex-swap-installer' "$REL_URL")" || fail "获取 Release 失败（网络或限流）"
 TAG="$(printf '%s' "$JSON" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
-URL="$(printf '%s' "$JSON" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*codex-swap-linux\.zip"' | head -n1 | sed 's/.*"\(http[^"]*\)".*/\1/')"
+URL="$(printf '%s' "$JSON" | grep -o "\"browser_download_url\"[[:space:]]*:[[:space:]]*\"[^\"]*${ASSET_NAME}\"" | head -n1 | sed 's/.*"\(http[^"]*\)".*/\1/')"
 [ -n "$TAG" ] && [ -n "$URL" ] || fail "Release 缺少资产 $ASSET_NAME"
 
 # ---------- 下载 ----------

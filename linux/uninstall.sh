@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# codex-swap 卸载器 (Linux/WSL2 独立分支)
+# codex-swap 卸载器 (Linux/macOS 独立分支)
 # 仅删除 ~/.local/bin/codex-swap 及其 sw 快捷命令，数据目录 ~/.codex 不受影响
 set -euo pipefail
 

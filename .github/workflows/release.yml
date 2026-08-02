@@ -33,8 +33,21 @@ jobs:
       - name: Linux 分支端到端切换测试
         run: scripts/test-linux.sh
 
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Bash syntax check (macOS 分支)
+        run: |
+          bash -n linux/codex-swap
+          bash -n linux/install.sh
+          bash -n linux/uninstall.sh
+          bash -n scripts/test-linux.sh
+      - name: macOS 分支端到端切换测试
+        run: scripts/test-linux.sh
+
   create-release:
-    needs: [test-windows, test-linux]
+    needs: [test-windows, test-linux, test-macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -43,7 +56,7 @@ jobs:
       - name: Build release zips (注入 VERSION)
         run: scripts/build.sh --package
       - name: Verify release packages
-        run: scripts/verify-release.sh "v$(tr -d '[:space:]' < VERSION)" codex-swap-windows.zip codex-swap-linux.zip
+        run: scripts/verify-release.sh "v$(tr -d '[:space:]' < VERSION)" codex-swap-windows.zip codex-swap-linux-macos.zip
       - name: Generate release notes (commit 列表)
         run: |
           tag="v$(tr -d '[:space:]' < VERSION)"
@@ -62,7 +75,7 @@ jobs:
       - name: Create GitHub Release
         run: |
           tag="v$(tr -d '[:space:]' < VERSION)"
-          gh release create "$tag" codex-swap-windows.zip codex-swap-linux.zip --target "$GITHUB_SHA" --title "$tag" --notes-file NOTES.md
+          gh release create "$tag" codex-swap-windows.zip codex-swap-linux-macos.zip --target "$GITHUB_SHA" --title "$tag" --notes-file NOTES.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Prune old releases (仅保留最新 2 个)

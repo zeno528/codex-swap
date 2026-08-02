@@ -2,7 +2,7 @@
 # 版本注入构建：VERSION 是唯一版本源，构建时把 @VERSION@ 占位符注入三处源码并打包双平台 zip。
 # 用法: scripts/build.sh [--inject|--package]
 #   --inject   就地注入版本到源码三处（本地开发/调试用）
-#   --package  构建 dist/ 并产出 codex-swap-windows.zip / codex-swap-linux.zip（默认）
+#   --package  构建 dist/ 并产出 Windows 与 Linux/macOS 两个 zip（默认）
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -29,10 +29,10 @@ case "${1:---package}" in
         cp "$VFILE" "$ROOT/dist/codex-swap"
         sed -i "s/@VERSION@/$VERSION/g" "$ROOT/dist/src"/*.psm1 "$ROOT/dist/src"/*.psd1 "$ROOT/dist/codex-swap"
         grep -rq '@VERSION@' "$ROOT/dist" && { echo "错误: dist 仍残留占位符 @VERSION@" >&2; exit 1; }
-        (cd "$ROOT/dist" && zip -qr "$ROOT/codex-swap-windows.zip" src bin && zip -qr "$ROOT/codex-swap-linux.zip" codex-swap)
+        (cd "$ROOT/dist" && zip -qr "$ROOT/codex-swap-windows.zip" src bin && zip -qr "$ROOT/codex-swap-linux-macos.zip" codex-swap)
         echo "已构建 v$VERSION:"
         echo "  codex-swap-windows.zip（src/ bin/）"
-        echo "  codex-swap-linux.zip（codex-swap）"
+        echo "  codex-swap-linux-macos.zip（codex-swap）"
         ;;
     *) echo "用法: $0 [--inject|--package]" >&2; exit 1 ;;
 esac

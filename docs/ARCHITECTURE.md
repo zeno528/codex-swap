@@ -57,14 +57,14 @@ windows/bin/codex-swap.cmd # 启动器（调 pwsh -File 入口）
 ## 分发
 
 - **Windows**：`windows/install.ps1`（irm|iex）→ GitHub API 取 latest release → 下载 `codex-swap-windows.zip` → 解压到 `~/.local/bin/codex-swap/` → 写 `.cmd` shim → 确保 PATH
-- **Linux/WSL2**：`linux/install.sh`（bash <(curl ...)）→ 下载 `codex-swap-linux.zip` → 安装 `~/.local/bin/codex-swap`（单一脚本）→ 确保 PATH。**纯 bash 独立实现，零 pwsh/Windows 依赖**
-- **自更新**：Windows `Invoke-Update` / Linux `cmd_update` 只以根目录 `VERSION` 与本机版本判断是否更新；Release 仅提供下载资产。下载后必须校验资产内部版本等于 `VERSION`，不匹配即拒绝替换。
-- **CI**：ci.yml（Windows+Linux 跑测试 + Linux bash 冒烟）/ release.yml（main 上 VERSION 变更时自动构建双 zip 上传）
+- **Linux/WSL2/macOS**：`linux/install.sh`（bash <(curl ...)）→ 下载统一的 `codex-swap-linux-macos.zip` → 安装 `~/.local/bin/codex-swap`（单一脚本）→ 确保 PATH（自动写入 `~/.bashrc` 与 `~/.zshrc`）。**纯 bash 独立实现，零 pwsh/Windows 依赖；macOS 自带 bash 3.2 即可运行（不用 bash 4+ 特性，路径解析为纯 bash 实现，打开目录按系统选择 `open`/`xdg-open`）**
+- **自更新**：Windows `Invoke-Update` / Linux/macOS `cmd_update` 均使用统一的 `codex-swap-linux-macos.zip`；下载后必须校验资产内部版本等于 `VERSION`，不匹配即拒绝替换。
+- **CI**：ci.yml（Windows+Linux/macOS 跑对应测试 + Linux 构建双平台 zip）/ release.yml（main 上 VERSION 变更时先通过 Windows+Linux/macOS 测试，再构建 Windows 与 Linux/macOS 两份 zip 上传）
 
 ## 双分支架构
 
 ```
-Windows 分支                 Linux/WSL2 分支（独立实现，零共享代码）
+Windows 分支                 Linux/WSL2/macOS 分支（独立实现，零共享代码）
 ├── windows/src/*.psm1       ├── linux/codex-swap   （纯 bash 主脚本）
 ├── windows/bin/*.cmd        ├── linux/install.sh
 ├── windows/install.ps1      └── linux/uninstall.sh

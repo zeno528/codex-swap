@@ -33,6 +33,19 @@ jobs:
       - name: 构建双平台发行包
         run: |
           scripts/build.sh --package
-          test "$(unzip -p codex-swap-linux.zip codex-swap | sed -n 's/^VERSION="\([^"]*\)".*/\1/p')" = "$(tr -d '[:space:]' < VERSION)"
+          test "$(unzip -p codex-swap-linux-macos.zip codex-swap | sed -n 's/^VERSION="\([^"]*\)".*/\1/p')" = "$(tr -d '[:space:]' < VERSION)"
       - name: Linux 分支端到端切换测试（隔离 CODEX_HOME）
+        run: scripts/test-linux.sh
+
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Bash syntax check (macOS 分支)
+        run: |
+          bash -n linux/codex-swap
+          bash -n linux/install.sh
+          bash -n linux/uninstall.sh
+          bash -n scripts/test-linux.sh
+      - name: macOS 分支端到端切换测试（隔离 CODEX_HOME）
         run: scripts/test-linux.sh

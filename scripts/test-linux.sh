@@ -82,7 +82,7 @@ sed 's/^VERSION="[^"]*"/VERSION="0.2.2"/' linux/codex-swap > "$test_root/codex-s
 if output="$(PATH="$fake_bin:$PATH" bash "$test_root/codex-swap" update 2>&1)"; then
     exit 1
 fi
-grep -q '找不到资产 codex-swap-linux.zip' <<< "$output"
+grep -q '找不到资产 codex-swap-linux-macos.zip' <<< "$output"
 
 # === 首次使用向导 ===
 wizard_home="$test_root/wizard"

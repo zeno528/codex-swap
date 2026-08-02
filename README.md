@@ -6,9 +6,9 @@
 
 模板播种 + 状态恢复：每个模型独立维护自己最新的完整配置，来回切换不丢使用记录、互不污染。
 
-[![License](https://img.shields.io/badge/License-MIT-3FAEC2)](LICENSE)
-![平台](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%2FWSL2-3FAEC2)
-![运行时](https://img.shields.io/badge/PowerShell%207%20%C2%B7%20Bash-3FAEC2)
+[![License](https://img.shields.io/badge/License-MIT-4CC61E)](LICENSE)
+![平台](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-2B7489)
+![运行时](https://img.shields.io/badge/PowerShell%207%20%C2%B7%20Bash-8250DF)
 
 </div>
 
@@ -16,16 +16,20 @@
 
 ## ⚡ 安装
 
+### 🐧 Linux / WSL2 / macOS
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/zeno528/codex-swap/main/linux/install.sh)
+```
+
+macOS 与 Linux 共用同一 bash 分支（零 Windows 依赖），系统自带 bash 即可运行，安装器会自动写入 `~/.zshrc`（macOS 默认 shell）。
+
+Release 页面会提供 `codex-swap-linux-macos.zip`，供 Linux、WSL2 与 macOS 共用。
+
 ### 🪟 Windows · PowerShell 7
 
 ```powershell
 irm https://raw.githubusercontent.com/zeno528/codex-swap/main/windows/install.ps1 | iex
-```
-
-### 🐧 Linux / WSL2
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/zeno528/codex-swap/main/linux/install.sh)
 ```
 
 ### 🗑️ 卸载
@@ -48,7 +52,7 @@ codex-swap doctor     # 环境体检
 codex-swap uninstall  # 卸载本机安装（带确认，数据目录不动）
 ```
 
-Windows 与 Linux/WSL2 下均可用快捷命令 `sw`（等同 `codex-swap`）。
+Windows、Linux/WSL2 与 macOS 下均可用快捷命令 `sw`（等同 `codex-swap`）。
 
 **首次使用**：模板目录 `~/.codex/models/` 为空时自动进入初始化向导 —— 检查 codex CLI（未安装时按系统给出安装命令）、选择导入已有模板或使用内置 🐳 DeepSeek 模板（V4-Flash / V4-Pro）、引导填写 API Key，并自动生成模型目录 `~/.codex/models.json`。
 
