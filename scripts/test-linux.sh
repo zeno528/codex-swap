@@ -46,13 +46,33 @@ output="$(CODEX_HOME="$long_home" bash linux/codex-swap list)"
 if grep -q 'very-long-template-name-1234567890' <<< "$output"; then exit 1; fi
 grep -q '\.\.\.' <<< "$output"
 
-# 激活识别边界：第三方（非 openai）严格匹配，不用 provider 宽泛判定
+# 激活识别边界：第三方（非 openai）严格匹配，多命中按内容差异消歧
 edge_home="$test_root/edge/.codex"
 mkdir -p "$edge_home/models" "$edge_home/model-states"
 printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' > "$edge_home/models/deepseek-cc.toml"
-printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' > "$edge_home/models/deepseek-cc-goals.toml"
+printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' 'notify = ["x"]' 'personality = "pragmatic"' > "$edge_home/models/deepseek-cc-goals.toml"
+printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' 'notify = ["x"]' 'personality = "pragmatic"' > "$edge_home/config.toml"
+output="$(CODEX_HOME="$edge_home" bash linux/codex-swap list)"
+goals_line=$(grep 'deepseek-cc-goals' <<< "$output" | head -1)
+cc_line=$(grep 'deepseek-cc' <<< "$output" | grep -v 'deepseek-cc-goals' | head -1)
+grep -q '✅' <<< "$goals_line"
+if grep -q '✅' <<< "$cc_line"; then exit 1; fi
+
+# config 与 deepseek-cc 简版一致 → cc 标激活，goals 不标
 printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' > "$edge_home/config.toml"
 output="$(CODEX_HOME="$edge_home" bash linux/codex-swap list)"
+cc_line=$(grep 'deepseek-cc' <<< "$output" | grep -v 'deepseek-cc-goals' | head -1)
+goals_line=$(grep 'deepseek-cc-goals' <<< "$output" | head -1)
+grep -q '✅' <<< "$cc_line"
+if grep -q '✅' <<< "$goals_line"; then exit 1; fi
+
+# 内容完全相同的两个模板：无法区分 → 都不标
+edge_same_home="$test_root/edgesame/.codex"
+mkdir -p "$edge_same_home/models" "$edge_same_home/model-states"
+printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' > "$edge_same_home/models/a.toml"
+printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' > "$edge_same_home/models/b.toml"
+printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' > "$edge_same_home/config.toml"
+output="$(CODEX_HOME="$edge_same_home" bash linux/codex-swap list)"
 if grep -q '✅' <<< "$output"; then exit 1; fi
 
 # 第三方单 provider：model 不同不允许“模型变化”回退

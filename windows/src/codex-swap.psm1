@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.70'
+$script:ScriptVersion = '0.2.71'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -82,6 +82,28 @@ function Set-TemplateDescription {
     $content = $Description.Trim() + "`n"
     [System.IO.File]::WriteAllText($p, $content, [System.Text.UTF8Encoding]::new($false))
     return $p
+}
+
+# === 工具：config 与模板的内容差异行数（对称差，越小越相似；多命中消歧用） ===
+function Get-ConfigDistance {
+    param(
+        [Parameter(Mandatory)] [string]$TemplatePath,
+        [Parameter(Mandatory)] [string]$ConfigPath
+    )
+    $tpl = [System.IO.File]::ReadAllLines($TemplatePath, [System.Text.UTF8Encoding]::new($false))
+    $cfg = [System.IO.File]::ReadAllLines($ConfigPath, [System.Text.UTF8Encoding]::new($false))
+    $tplCounts = [System.Collections.Generic.Dictionary[string, int]]::new([System.StringComparer]::Ordinal)
+    foreach ($l in $tpl) {
+        if ($tplCounts.ContainsKey($l)) { $tplCounts[$l]++ } else { $tplCounts[$l] = 1 }
+    }
+    $common = 0
+    foreach ($l in $cfg) {
+        if ($tplCounts.ContainsKey($l) -and $tplCounts[$l] -gt 0) {
+            $common++
+            $tplCounts[$l]--
+        }
+    }
+    return (($cfg.Count - $common) + ($tpl.Count - $common))
 }
 
 # === 核心：从单个模板里提取 (model, model_provider, token 指纹) ===
@@ -203,6 +225,20 @@ function Resolve-ActiveMarkers {
                     $activeFiles += $f
                 }
             }
+        } else {
+            # 多命中且无指纹：按内容差异行数选最小且唯一者（第三方同 provider 模板区分）
+            $best = $null
+            $bestDist = -1
+            foreach ($f in $exactFiles) {
+                $d = Get-ConfigDistance -TemplatePath $f -ConfigPath $ConfigPath
+                if ($bestDist -eq -1 -or $d -lt $bestDist) {
+                    $bestDist = $d
+                    $best = $f
+                } elseif ($d -eq $bestDist) {
+                    $best = $null
+                }
+            }
+            if ($null -ne $best) { $activeFiles = @($best) }
         }
     } elseif ($current.Provider -ceq 'openai' -and $null -ne $current.Model -and $providerFiles.Count -eq 1) {
         $activeFiles = $providerFiles
@@ -246,6 +282,23 @@ function Resolve-ActiveName {
             if (-not [string]::IsNullOrEmpty($h.Fingerprint) -and $h.Fingerprint -ceq $current.TokenFingerprint) {
                 return [System.IO.Path]::GetFileNameWithoutExtension($h.Path)
             }
+        }
+    }
+    # 多命中且无指纹：按内容差异行数选最小且唯一者（第三方同 provider 模板区分）
+    if ($hits.Count -gt 1 -and [string]::IsNullOrEmpty($current.TokenFingerprint)) {
+        $best = $null
+        $bestDist = -1
+        foreach ($h in $hits) {
+            $d = Get-ConfigDistance -TemplatePath $h.Path -ConfigPath $ConfigPath
+            if ($bestDist -eq -1 -or $d -lt $bestDist) {
+                $bestDist = $d
+                $best = $h.Path
+            } elseif ($d -eq $bestDist) {
+                $best = $null
+            }
+        }
+        if ($null -ne $best) {
+            return [System.IO.Path]::GetFileNameWithoutExtension($best)
         }
     }
     if ($hits.Count -eq 0 -and $current.Provider -ceq 'openai' -and $null -ne $current.Model -and $providerHits.Count -eq 1) {
@@ -1497,6 +1550,7 @@ Export-ModuleMember -Function @(
     'Test-TemplateName',
     'Get-TemplateDescription',
     'Set-TemplateDescription',
+    'Get-ConfigDistance',
     'Get-TemplateFingerprint',
     'Get-CurrentFingerprint',
     'Resolve-ActiveMarkers',

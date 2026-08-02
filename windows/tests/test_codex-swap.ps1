@@ -352,8 +352,24 @@ try {
     $cfgB = Join-Path $tmpB 'config.toml'
     [System.IO.File]::WriteAllText($cfgB, 'model = "deepseek-v4-flash"' + "`n" + 'model_provider = "custom"', [System.Text.UTF8Encoding]::new($false))
     $markers = Resolve-ActiveMarkers -Files @($c1, $c2) -ConfigPath $cfgB
-    Assert-True ($markers[$c1] -eq 'none' -and $markers[$c2] -eq 'none') '第三方多命中无指纹不误标'
-    Assert-True ($null -eq (Resolve-ActiveName -Files @($c1, $c2) -ConfigPath $cfgB)) 'Resolve-ActiveName 多命中无指纹返回 $null'
+    Assert-True ($markers[$c1] -eq 'none' -and $markers[$c2] -eq 'none') '内容完全相同的多命中不误标'
+    Assert-True ($null -eq (Resolve-ActiveName -Files @($c1, $c2) -ConfigPath $cfgB)) '内容完全相同返回 $null'
+
+    # 内容差异消歧：config 与 goals 一致 → goals active、cc none
+    $g1 = Join-Path $tmpB 'deepseek-cc-goals-rich.toml'
+    $richContent = 'model = "deepseek-v4-flash"' + "`n" + 'model_provider = "custom"' + "`n" + 'notify = ["x"]' + "`n" + 'personality = "pragmatic"'
+    [System.IO.File]::WriteAllText($g1, $richContent, [System.Text.UTF8Encoding]::new($false))
+    $cfgG = Join-Path $tmpB 'goals-config.toml'
+    [System.IO.File]::WriteAllText($cfgG, $richContent, [System.Text.UTF8Encoding]::new($false))
+    $markers = Resolve-ActiveMarkers -Files @($c1, $g1) -ConfigPath $cfgG
+    Assert-True ($markers[$g1] -eq 'active' -and $markers[$c1] -eq 'none') '内容差异消歧：与 config 一致的模板标 active'
+    Assert-True ((Resolve-ActiveName -Files @($c1, $g1) -ConfigPath $cfgG) -eq 'deepseek-cc-goals-rich') 'Resolve-ActiveName 内容消歧返回正确模板'
+    $cfgC = Join-Path $tmpB 'cc-config.toml'
+    [System.IO.File]::WriteAllText($cfgC, 'model = "deepseek-v4-flash"' + "`n" + 'model_provider = "custom"', [System.Text.UTF8Encoding]::new($false))
+    $markers = Resolve-ActiveMarkers -Files @($c1, $g1) -ConfigPath $cfgC
+    Assert-True ($markers[$c1] -eq 'active' -and $markers[$g1] -eq 'none') '内容差异消歧：cc 简版匹配'
+    Assert-True ((Get-ConfigDistance -TemplatePath $cfgG -ConfigPath $cfgG) -eq 0) '相同内容距离为 0'
+    Assert-True ((Get-ConfigDistance -TemplatePath $c1 -ConfigPath $cfgG) -gt 0) '不同内容距离大于 0'
 
     # 大小写敏感：model 大小写不同不匹配
     $cu = Join-Path $tmpB 'upper.toml'

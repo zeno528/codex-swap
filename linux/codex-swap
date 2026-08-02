@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.70"
+VERSION="0.2.71"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -58,6 +58,15 @@ token_fp() {
     else
         echo "$t"
     fi
+}
+
+# === 工具：config 与模板的内容差异行数（对称差，越小越相似；多命中消歧用） ===
+config_distance() {
+    local tpl="$1" common tpl_lines cfg_lines
+    common=$(grep -Fxf "$CONFIG" "$tpl" 2>/dev/null | wc -l | tr -d ' ')
+    tpl_lines=$(wc -l < "$tpl" | tr -d ' ')
+    cfg_lines=$(wc -l < "$CONFIG" | tr -d ' ')
+    echo $((cfg_lines - common + tpl_lines - common))
 }
 
 # === 工具：semver 比较 v1 > v2 ? ===
@@ -137,6 +146,23 @@ resolve_active() {
         for h in "${hits[@]}"; do
             [ "${h#*|}" = "$cur_fp" ] && { echo "$(basename "${h%%|*}" .toml)"; return; }
         done
+    fi
+    # 多命中且无指纹可消歧：按内容差异行数选最小且唯一者（第三方同 provider 模板区分）
+    if [ "${#hits[@]}" -gt 1 ] && [ -z "$cur_fp" ]; then
+        local best="" best_dist=-1 hp d
+        for h in "${hits[@]}"; do
+            hp="${h%%|*}"
+            d=$(config_distance "$hp")
+            if [ "$best_dist" -eq -1 ] || [ "$d" -lt "$best_dist" ]; then
+                best_dist=$d
+                best="$hp"
+            elif [ "$d" -eq "$best_dist" ]; then
+                best=""
+            fi
+        done
+        if [ -n "$best" ]; then
+            echo "$(basename "$best" .toml)"; return
+        fi
     fi
     if [ "${#hits[@]}" -eq 0 ] && [ "$cur_provider" = "openai" ] && [ "${#provider_hits[@]}" -eq 1 ]; then
         echo "$(basename "${provider_hits[0]}" .toml)"; return
@@ -334,6 +360,25 @@ cmd_list() {
     table_row '编号' '状态' '名称' '模型' '供应商' "$BOLD_CYAN" "$name_width" '描述'
     table_rule '├' '┼' '┤' 4 6 "$name_width" 26 14 26
 
+    # 第三方多命中且无指纹可消歧时：按内容差异行数选最小且唯一者
+    local best_exact="" best_dist=-1
+    if [ "$exact_matches" -gt 1 ] && [ "$cur_provider" != "openai" ] && [ -z "$cur_fp" ]; then
+        for f in "$MODELS_DIR"/*.toml; do
+            [ -f "$f" ] || continue
+            model=$(get_field "$f" model)
+            provider=$(effective_provider "$(get_field "$f" model_provider)")
+            if [ -n "$cur_model" ] && [ "$model" = "$cur_model" ] && [ "$provider" = "$cur_provider" ]; then
+                d=$(config_distance "$f")
+                if [ "$best_dist" -eq -1 ] || [ "$d" -lt "$best_dist" ]; then
+                    best_dist=$d
+                    best_exact="$f"
+                elif [ "$d" -eq "$best_dist" ]; then
+                    best_exact=""
+                fi
+            fi
+        done
+    fi
+
     local i=0 name status color desc fp
     for f in "$MODELS_DIR"/*.toml; do
         [ -f "$f" ] || continue
@@ -356,6 +401,9 @@ cmd_list() {
                     status='✅'
                     color="$BOLD_GREEN"
                 fi
+            elif [ -n "$best_exact" ] && [ "$f" = "$best_exact" ]; then
+                status='✅'
+                color="$BOLD_GREEN"
             fi
         elif [ "$cur_provider" = "openai" ] && [ -n "$cur_model" ] && [ "$exact_matches" -eq 0 ] &&
              [ "$provider_matches" -eq 1 ] && [ "$provider" = "$cur_provider" ]; then
