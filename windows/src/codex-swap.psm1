@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.53'
+$script:ScriptVersion = '0.2.54'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -661,9 +661,9 @@ function Invoke-Use {
     $mode = if ($switch.Source -eq 'state') { '状态恢复' } else { '模板初始化' }
     $lineCount = [regex]::Matches($newContent, '\n').Count
     Write-ColorOutput "  ✅ 已切换至 $Name" Green
-    Write-ColorOutput "  来源：$mode · $lineCount 行" DarkGray
+    Write-ColorOutput "  来源：$mode" DarkGray
     Write-ColorOutput "" White
-    Write-ColorOutput "  📋 当前配置" Cyan
+    Write-ColorOutput "  📋 当前配置 · $lineCount 行" Cyan
     $n = 0
     foreach ($line in ($newContent -split [char]10)) {
         if ($n -ge 15) { break }

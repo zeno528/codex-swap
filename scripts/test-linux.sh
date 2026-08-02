@@ -25,7 +25,7 @@ grep -q '通过 7 / 7' <<< "$output"
 
 output="$(bash linux/codex-swap use gpt)"
 grep -q '已切换至 gpt' <<< "$output"
-grep -q '当前配置' <<< "$output"
+grep -q '📋 当前配置 · 4 行' <<< "$output"
 ! grep -q '⚠️' <<< "$output"
 cmp "$test_root/deepseek-before.toml" "$CODEX_HOME/model-states/deepseek.toml"
 grep -q 'gpt-5.6-terra' "$CODEX_HOME/config.toml"

@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.53"
+VERSION="0.2.54"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -339,8 +339,8 @@ cmd_use() {
     local lines
     lines=$(wc -l < "$CONFIG")
     printf "${GREEN}  ✅ 已切换至 %s${C}\n" "$name"
-    printf "${DGRAY}  来源：%s · %s 行${C}\n\n" "$mode" "$lines"
-    printf "${BOLD_CYAN}  📋 当前配置${C}\n"
+    printf "${DGRAY}  来源：%s${C}\n\n" "$mode"
+    printf "${BOLD_CYAN}  📋 当前配置 · %s 行${C}\n" "$lines"
     local n=0
     while IFS= read -r line && [ "$n" -lt 15 ]; do
         n=$((n+1))
