@@ -1,0 +1,57 @@
+name: test
+
+on:
+  workflow_call:
+
+jobs:
+  test-windows-5-1:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run tests (PowerShell 5.1, Windows 分支)
+        shell: powershell
+        run: ./windows/tests/test_codex-swap.ps1
+
+  test-windows-7:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run tests (PowerShell 7, Windows 分支)
+        shell: pwsh
+        run: ./windows/tests/test_codex-swap.ps1
+
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Bash syntax check (Linux 分支)
+        run: |
+          bash -n linux/codex-swap
+          bash -n linux/install.sh
+          bash -n linux/uninstall.sh
+          bash -n scripts/verify-release.sh
+          bash -n scripts/build.sh
+          bash -n .githooks/pre-commit .githooks/prepare-commit-msg .githooks/post-commit .githooks/lib.sh
+      - name: Git hooks 测试（版本递增 + CHANGELOG 自动写入）
+        run: scripts/test-hooks.sh
+      - name: 校验版本源与占位符状态
+        run: scripts/verify-release.sh
+      - name: 构建双平台发行包
+        run: |
+          scripts/build.sh --package
+          test "$(unzip -p codex-swap-linux-macos.zip codex-swap | sed -n 's/^VERSION="\([^"]*\)".*/\1/p')" = "$(tr -d '[:space:]' < VERSION)"
+      - name: Linux 分支端到端切换测试（隔离 CODEX_HOME）
+        run: scripts/test-linux.sh
+
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Bash syntax check (macOS 分支)
+        run: |
+          bash -n linux/codex-swap
+          bash -n linux/install.sh
+          bash -n linux/uninstall.sh
+          bash -n scripts/test-linux.sh
+      - name: macOS 分支端到端切换测试（隔离 CODEX_HOME）
+        run: scripts/test-linux.sh

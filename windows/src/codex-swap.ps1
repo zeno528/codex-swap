@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
 .SYNOPSIS
     codex-swap 入口脚本（Windows 安装版 / 开发模式通用）

@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 # 单元测试 codex-swap v0.2.0 核心模块
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -249,6 +249,23 @@ Assert-True ($moduleText -match 'IsWindowsPlatform' -and $moduleText -notmatch '
 Assert-True ($cmdText -match 'where pwsh' -and $cmdText -match 'powershell\.exe') '启动器优先 pwsh、回退 powershell.exe'
 Assert-True ($installText -match '需要 PowerShell 5\.1\+' -and $installText -match 'where pwsh') '安装器支持 5.1 并生成兼容启动器'
 Assert-True ($moduleText -match 'Invoke-WebRequest -UseBasicParsing' -and $installText -match 'Invoke-WebRequest -UseBasicParsing') '下载路径显式使用安全的基础解析'
+
+Write-Host "`n=== Test 17: PowerShell 5.1 脚本编码 ===" -ForegroundColor Cyan
+function Test-Utf8Bom([string]$Path) {
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    return $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
+}
+$scriptFiles = @(
+    (Join-Path $PSScriptRoot '../src/codex-swap.psm1'),
+    (Join-Path $PSScriptRoot '../src/codex-swap.ps1'),
+    (Join-Path $PSScriptRoot '../src/codex-swap.psd1'),
+    (Join-Path $PSScriptRoot '../install.ps1'),
+    (Join-Path $PSScriptRoot '../uninstall.ps1'),
+    $PSCommandPath
+)
+foreach ($scriptFile in $scriptFiles) {
+    Assert-True (Test-Utf8Bom $scriptFile) "脚本使用 UTF-8 BOM：$(Split-Path $scriptFile -Leaf)"
+}
 
 Write-Host "`n=== 总结 ===" -ForegroundColor Cyan
 Write-Host "通过: $pass" -ForegroundColor Green

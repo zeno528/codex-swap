@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.59] - 2026-08-02
+
+- fix(ci): 串联测试与发行并修复 PowerShell 5.1 编码
+
+
 ## [0.2.58] - 2026-08-02
 
 - ✨ feat(win): 兼容 PowerShell 5.1，启动器优先 pwsh 回退 powershell.exe

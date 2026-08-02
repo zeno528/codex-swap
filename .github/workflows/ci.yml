@@ -5,55 +5,91 @@ on:
     branches: [main, dev]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  test-windows-5-1:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Run tests (PowerShell 5.1, Windows 分支)
-        shell: powershell
-        run: ./windows/tests/test_codex-swap.ps1
+  test:
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
 
-  test-windows-7:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Run tests (PowerShell 7, Windows 分支)
-        shell: pwsh
-        run: ./windows/tests/test_codex-swap.ps1
-
-  test-linux:
+  release-check:
+    if: needs.test.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test]
     runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.version.outputs.should_release }}
     steps:
       - uses: actions/checkout@v7
-      - name: Bash syntax check (Linux 分支)
+        with:
+          fetch-depth: 0
+      - name: 判断是否为 main 分支 VERSION 变更
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
         run: |
-          bash -n linux/codex-swap
-          bash -n linux/install.sh
-          bash -n linux/uninstall.sh
-          bash -n scripts/verify-release.sh
-          bash -n scripts/build.sh
-          bash -n .githooks/pre-commit .githooks/prepare-commit-msg .githooks/post-commit .githooks/lib.sh
-      - name: Git hooks 测试（版本递增 + CHANGELOG 自动写入）
-        run: scripts/test-hooks.sh
-      - name: 校验版本源与占位符状态
-        run: scripts/verify-release.sh
-      - name: 构建双平台发行包
-        run: |
-          scripts/build.sh --package
-          test "$(unzip -p codex-swap-linux-macos.zip codex-swap | sed -n 's/^VERSION="\([^"]*\)".*/\1/p')" = "$(tr -d '[:space:]' < VERSION)"
-      - name: Linux 分支端到端切换测试（隔离 CODEX_HOME）
-        run: scripts/test-linux.sh
+          should_release=false
+          if [ "$EVENT_NAME" = "push" ] && [ "$REF" = "refs/heads/main" ]; then
+            zero_sha="0000000000000000000000000000000000000000"
+            if [ "$BEFORE_SHA" = "$zero_sha" ]; then
+              changed="$(git show --format= --name-only "$HEAD_SHA" -- VERSION)"
+            else
+              changed="$(git diff --name-only "$BEFORE_SHA" "$HEAD_SHA" -- VERSION)"
+            fi
+            if printf '%s\n' "$changed" | grep -Fxq 'VERSION'; then
+              should_release=true
+            fi
+          fi
+          echo "should_release=$should_release" >> "$GITHUB_OUTPUT"
+          echo "should_release=$should_release"
 
-  test-macos:
-    runs-on: macos-latest
+  create-release:
+    if: needs.test.result == 'success' && needs.release-check.result == 'success' && needs.release-check.outputs.should_release == 'true'
+    needs: [test, release-check]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
-      - name: Bash syntax check (macOS 分支)
+        with:
+          fetch-depth: 0
+      - name: Build release zips (注入 VERSION)
+        run: scripts/build.sh --package
+      - name: Verify release packages
+        run: scripts/verify-release.sh "v$(tr -d '[:space:]' < VERSION)" codex-swap-windows.zip codex-swap-linux-macos.zip
+      - name: Generate release notes (commit 列表)
         run: |
-          bash -n linux/codex-swap
-          bash -n linux/install.sh
-          bash -n linux/uninstall.sh
-          bash -n scripts/test-linux.sh
-      - name: macOS 分支端到端切换测试（隔离 CODEX_HOME）
-        run: scripts/test-linux.sh
+          tag="v$(tr -d '[:space:]' < VERSION)"
+          prev="$(git tag --sort=-v:refname | head -1 || true)"
+          {
+            echo "## 更新内容"
+            if [ -n "$prev" ] && git merge-base --is-ancestor "$prev" HEAD 2>/dev/null; then
+              git log --format='- %s' "${prev}..HEAD"
+              echo ""
+              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${prev}...${tag}"
+            else
+              git log --format='- %s'
+            fi
+          } > NOTES.md
+          cat NOTES.md
+      - name: Create GitHub Release
+        run: |
+          tag="v$(tr -d '[:space:]' < VERSION)"
+          gh release create "$tag" codex-swap-windows.zip codex-swap-linux-macos.zip --target "$GITHUB_SHA" --title "$tag" --notes-file NOTES.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prune old releases (仅保留最新 5 个)
+        run: |
+          gh release list --limit 100 \
+            --json tagName,publishedAt \
+            --jq '[.[] | select(.publishedAt != null)] | sort_by(.publishedAt) | reverse | .[5:][] | .tagName' \
+            | while read -r old_tag; do
+                echo "  删除旧 Release: $old_tag"
+                gh release delete "$old_tag" --yes
+              done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
