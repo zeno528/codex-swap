@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.39"
+VERSION="0.2.40"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -785,11 +785,11 @@ cmd_menu() {
         cmd_list
         local files=("$MODELS_DIR"/*.toml) prompt
         if [ -f "${files[0]:-}" ]; then
-            printf "${DGRAY}  操作：U 更新 · O 打开模板目录 · Enter 刷新 · Q 退出${C}\n"
+            printf "${DGRAY}  操作：U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出${C}\n"
             echo ""
             prompt="  选择模型 [1-${#files[@]}] › "
         else
-            prompt="  操作：U 更新 · O 打开模板目录 · Enter 刷新 · Q 退出 › "
+            prompt="  操作：U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出 › "
         fi
         read -r -p "$prompt" choice || break
         case "$choice" in

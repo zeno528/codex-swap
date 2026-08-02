@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.39'
+$script:ScriptVersion = '0.2.40'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-switch'
 $script:ReleaseAsset   = 'codex-switch-windows.zip'
@@ -52,21 +52,6 @@ function Get-TemplateFingerprint {
         $fp = $tok
     }
     return @{ Model = $m; Provider = $p; TokenFingerprint = $fp }
-}
-
-# === 工具：圆角框标题（自适应宽度，CJK/emoji 安全）===
-function Show-TitleBox {
-    param(
-        [Parameter(Mandatory)] [string]$Text,
-        [string]$Color = 'Cyan'
-    )
-    $innerW = Get-DisplayWidth $Text
-    $W = $innerW + 4   # 左右各 2 字符缓冲
-    $dash = '─' * $W
-    $pad  = ' ' * 2
-    Write-Host "  ╭$dash╮" -ForegroundColor $Color
-    Write-Host "  │$pad$Text$pad│" -ForegroundColor $Color
-    Write-Host "  ╰$dash╯" -ForegroundColor $Color
 }
 
 # === 工具：计算字符串的终端显示宽度（CJK/emoji 安全）===
@@ -893,12 +878,9 @@ function Invoke-Menu {
     while ($true) {
         # 每次重绘菜单前清屏，避免终端内容无限累积
         Clear-Host
-        Show-TitleBox "💻 codex-switch v$($script:ScriptVersion) — 模型切换" Cyan
         $esc = [char]27
-        Write-Host "  ${esc}]8;;$($script:RepoUrl)${esc}\" -NoNewline -ForegroundColor Cyan
-        Write-Host $script:RepoUrl -NoNewline -ForegroundColor Cyan
-        Write-Host "${esc}]8;;${esc}\" -ForegroundColor Cyan
-        Write-ColorOutput "   选数字切模型，q 退出" DarkGray
+        Write-Host "  $esc[1;38;2;63;174;194m💻 codex-switch v$($script:ScriptVersion) · 模型切换$esc[0m"
+        Write-Host "  $esc[38;2;63;174;194m🔗 项目仓库: $($script:RepoUrl)$esc[0m"
         Write-ColorOutput "" White
 
         # 读当前 model + provider（用于标 ✅）
@@ -1011,8 +993,13 @@ function Invoke-Menu {
 
         Write-Host ''
 
-        $prompt = if ($files.Count -gt 0) { "选择 (1-$($files.Count))，📂 o 打开目录，回车刷新，q 退出" } else { "📂 o 打开目录，回车刷新，q 退出" }
-        $choice = Read-Host $prompt
+        Write-ColorOutput "  操作：U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出" DarkGray
+        Write-ColorOutput "" White
+        if ($files.Count -gt 0) {
+            $choice = Read-Host "  选择模型 [1-$($files.Count)] › "
+        } else {
+            $choice = Read-Host "  操作：U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出 › "
+        }
         if ($choice -eq 'q' -or $choice -eq 'Q') { return }
         if ([string]::IsNullOrWhiteSpace($choice)) { continue }
 
@@ -1025,6 +1012,13 @@ function Invoke-Menu {
                 Start-Process explorer.exe $script:ModelsDir
             }
             Write-ColorOutput "" White
+            continue
+        }
+
+        # 字母 u：检查并升级
+        if ($choice -eq 'u' -or $choice -eq 'U') {
+            Invoke-Update
+            Read-Host "`n按回车返回菜单"
             continue
         }
 
