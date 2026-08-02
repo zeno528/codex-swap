@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.43'
+$script:ScriptVersion = '0.2.44'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -641,9 +641,15 @@ function Invoke-Use {
     } else {
         Write-ColorOutput "🔑 $Name 无 auth 记录" DarkGray
     }
+    # 与 Linux 一致：只显示顶层键值（到 [section] 停、最多 15 行、掩码敏感值）
+    Write-ColorOutput "  📋 当前配置" Cyan
+    $n = 0
     foreach ($line in ($newContent -split [char]10)) {
+        if ($n -ge 15) { break }
+        $n++
         $t = $line.Trim()
         if ($t -eq '') { continue }
+        if ($t -match '^\[') { break }
         if ($t -match '(token|key|password|secret)\s*=\s*"(.+)"') {
             $val = $Matches[2]
             if ($val.Length -ge 16) {
@@ -651,9 +657,10 @@ function Invoke-Use {
                 $t = $t -replace [regex]::Escape($val), $masked
             }
         }
-        Write-ColorOutput "   $t" White
+        Write-ColorOutput "  $t" White
     }
-    Write-ColorOutput "⚠️  请重启 Codex 生效" Yellow
+    Write-ColorOutput ""
+    Write-ColorOutput "  ℹ️ 重启 Codex 后生效" DarkGray
 }
 
 # === 工具：模板显示名（DeepSeek 系列带 🐳） ===
