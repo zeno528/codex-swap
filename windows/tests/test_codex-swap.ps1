@@ -226,11 +226,12 @@ try {
 Write-Host "`n=== Test 15: uninstall 短命令与 Linux 对齐 ===" -ForegroundColor Cyan
 $moduleText = [System.IO.File]::ReadAllText($modulePath, [System.Text.UTF8Encoding]::new($false))
 Assert-True ($moduleText -match "'uninstall' \{ Invoke-Uninstall \}") 'psm1 分发含 uninstall 命令'
-Assert-True ($moduleText -match "ValidateSet\('list', 'current', 'use', 'update', 'doctor', 'uninstall', 'help', 'menu'\)") 'psm1 ValidateSet 含 uninstall'
 Assert-True ($moduleText -match "'Invoke-Uninstall'") 'Invoke-Uninstall 已导出'
+Assert-True ($moduleText -match '未知命令') 'psm1 未知命令中文提示（与 Linux 一致）'
+Assert-True ($moduleText -match 'exit 1') 'psm1 致命错误非零退出码（与 Linux fail 一致）'
 $entryPath = Join-Path $PSScriptRoot '../src/codex-swap.ps1'
 $entryText = [System.IO.File]::ReadAllText($entryPath, [System.Text.UTF8Encoding]::new($false))
-Assert-True ($entryText -match "ValidateSet\('list', 'current', 'use', 'update', 'doctor', 'uninstall', 'help', 'menu'\)") '入口脚本 ValidateSet 含 uninstall'
+Assert-True ($entryText -notmatch 'ValidateSet') '入口脚本不拦截未知命令（走中文提示）'
 
 Write-Host "`n=== 总结 ===" -ForegroundColor Cyan
 Write-Host "通过: $pass" -ForegroundColor Green

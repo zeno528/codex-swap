@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.45] - 2026-08-02
+
+- refactor: 移除入口脚本中的 ValidateSet，优化未知命令处理逻辑
+
+
 ## [0.2.44] - 2026-08-02
 
 - refactor: 更新 Invoke-Use 函数以优化配置输出和提示信息

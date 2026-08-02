@@ -15,7 +15,6 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('list', 'current', 'use', 'update', 'doctor', 'uninstall', 'help', 'menu')]
     [string]$Command = 'menu',
 
     [Parameter(Position = 1)]

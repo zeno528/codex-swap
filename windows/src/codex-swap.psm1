@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.44'
+$script:ScriptVersion = '0.2.45'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -11,6 +11,8 @@ $script:VersionUrl     = "https://raw.githubusercontent.com/$($script:RepoOwner)
 $script:RepoUrl        = "https://github.com/$($script:RepoOwner)/$($script:RepoName)"
 
 function Get-CodexHome {
+    # 与 Linux 一致：CODEX_HOME 环境变量优先（测试/隔离依赖它），否则默认 ~/.codex
+    if (-not [string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { return $env:CODEX_HOME }
     $home = if ($IsWindows) { $env:USERPROFILE } else { $env:HOME }
     return Join-Path $home '.codex'
 }
@@ -26,9 +28,10 @@ $script:DeepseekMinCodex = '0.144.0'
 function Write-ColorOutput {
     param(
         [Parameter(Mandatory)] [AllowEmptyString()] [string]$Text,
-        [string]$Color = 'White'
+        [string]$Color = 'White',
+        [switch]$NoNewline
     )
-    Write-Host $Text -ForegroundColor $Color
+    Write-Host $Text -ForegroundColor $Color -NoNewline:$NoNewline
 }
 
 # === 核心：从单个模板里提取 (model, model_provider, token 指纹) ===
@@ -441,14 +444,17 @@ $script:TemplateModelsJson = @'
 # === 子命令 ===
 
 function Invoke-Current {
+    if (-not [System.IO.File]::Exists($script:ConfigPath)) {
+        throw "config 不存在: $($script:ConfigPath)"
+    }
     $content = [System.IO.File]::ReadAllText($script:ConfigPath, [System.Text.UTF8Encoding]::new($false))
     $lines = $content -split [char]10
-    Write-ColorOutput "📦 当前生效的模型配置:" Cyan
-    Write-ColorOutput ("=" * 56) DarkGray
+    # 与 Linux cmd_current 一致：两空格缩进、无分隔线、到第一个 [section] 就停
+    Write-ColorOutput "  📦 当前生效的模型配置" Cyan
     foreach ($line in $lines) {
         $trimmed = $line.Trim()
         if ($trimmed -eq '') { continue }
-        if ($trimmed -match '^\[') { break }  # 到第一个 [section] 就停
+        if ($trimmed -match '^\[') { break }
         Write-ColorOutput "  $trimmed" White
     }
 }
@@ -460,23 +466,31 @@ function Invoke-List {
     $files = [System.IO.Directory]::GetFiles($script:ModelsDir, '*.toml')
 
     if ($files.Count -eq 0) {
-        Write-ColorOutput "❓ 模板目录为空: $($script:ModelsDir)" Yellow
+        Write-ColorOutput "  ❓ 模板目录为空: $($script:ModelsDir)" Yellow
+        Write-ColorOutput "     手动新建 .toml 模板文件后回车刷新" DarkGray
         return
     }
 
-    # 读当前 model + provider
-    $currentContent = [System.IO.File]::ReadAllText($script:ConfigPath, [System.Text.UTF8Encoding]::new($false))
+    # 读当前 model + provider（config 不存在时按"无激活项"渲染，与 Linux get_field 空串一致）
     $currentModel = ''
     $currentProvider = ''
-    foreach ($line in ($currentContent -split [char]10)) {
-        $t = $line.Trim()
-        if ($t -match '^model\s*=\s*(.*)$')               { $currentModel = $Matches[1].Trim().Trim('"') }
-        if ($t -match '^model_provider\s*=\s*(.*)$')      { $currentProvider = $Matches[1].Trim().Trim('"') }
-        if ($currentModel -ne '' -and $currentProvider -ne '') { break }
+    if ([System.IO.File]::Exists($script:ConfigPath)) {
+        $currentContent = [System.IO.File]::ReadAllText($script:ConfigPath, [System.Text.UTF8Encoding]::new($false))
+        foreach ($line in ($currentContent -split [char]10)) {
+            $t = $line.Trim()
+            if ($t -match '^model\s*=\s*(.*)$')               { $currentModel = $Matches[1].Trim().Trim('"') }
+            if ($t -match '^model_provider\s*=\s*(.*)$')      { $currentProvider = $Matches[1].Trim().Trim('"') }
+            if ($currentModel -ne '' -and $currentProvider -ne '') { break }
+        }
     }
 
-    # 解析每个模板的数据 + 标记
-    $markers = Resolve-ActiveMarkers -Files $files -ConfigPath $script:ConfigPath
+    # 解析每个模板的数据 + 标记（config 不存在 → 全部 none）
+    if ([System.IO.File]::Exists($script:ConfigPath)) {
+        $markers = Resolve-ActiveMarkers -Files $files -ConfigPath $script:ConfigPath
+    } else {
+        $markers = @{}
+        foreach ($f in $files) { $markers[$f] = 'none' }
+    }
     $rows = [System.Collections.Generic.List[hashtable]]::new()
     for ($i = 0; $i -lt $files.Count; $i++) {
         $name = [System.IO.Path]::GetFileNameWithoutExtension($files[$i])
@@ -495,8 +509,8 @@ function Invoke-List {
             Num     = "$(($i + 1))"
             Status  = $marker
             Name    = $name
-            Model   = $tplModel
-            Provider = "$(Get-ProviderIcon $tplProvider $tplModel)$tplProvider"
+            Model   = $(if ($tplModel) { $tplModel } else { '-' })
+            Provider = "$(Get-ProviderIcon $tplProvider $tplModel)$(if ($tplProvider) { $tplProvider } else { '-' })"
         })
     }
 
@@ -577,31 +591,37 @@ function Invoke-List {
 function Invoke-Use {
     param([Parameter(Mandatory)] [string]$Name)
 
+    # 0. 与 Linux 一致：目标模板必须存在（切出前校验；有状态但模板被删也报错）
+    $tplPath = Join-Path $script:ModelsDir "$Name.toml"
+    if (-not [System.IO.File]::Exists($tplPath)) {
+        throw "模板不存在: $tplPath"
+    }
+
     # 1. 切出：找出当前 config 对应的源模型，把最新状态完整存下
     $files = [System.IO.Directory]::GetFiles($script:ModelsDir, '*.toml')
     $sourceName = Resolve-ActiveName -Files $files -ConfigPath $script:ConfigPath
     if ($null -ne $sourceName) {
         Save-ModelState -Name $sourceName -ConfigPath $script:ConfigPath -StateDir $script:StateDir
-        Write-ColorOutput "💾 已保存 $sourceName 的最新状态" DarkGray
+        Write-ColorOutput "  💾 已保存状态：$sourceName" DarkGray
         Save-ModelAuth -Name $sourceName -AuthPath $script:AuthPath -StateDir $script:StateDir
         if ([System.IO.File]::Exists($script:AuthPath)) {
-            Write-ColorOutput "🔑 已保存 $sourceName 的 auth 状态" DarkGray
+            Write-ColorOutput "  🔑 已保存 auth 状态：$sourceName" DarkGray
         }
     } else {
-        Write-ColorOutput "⚠️ 当前 config 匹配不到任何模板，跳过状态保存" Yellow
+        Write-ColorOutput "  ⚠️ 当前配置未匹配模板，未保存状态" Yellow
     }
 
     # 2. 目标已激活：无需切换
     if ($sourceName -eq $Name) {
-        Write-ColorOutput "✅ $Name 已是最新状态，无需切换" Green
+        Write-ColorOutput "  ✅ 当前已是 $Name，无需切换" Green
         return
     }
 
     # 3. 目标内容：优先恢复它的状态，首次才用模板播种
     $switch = Get-SwitchContent -Name $Name -ModelsDir $script:ModelsDir -StateDir $script:StateDir
 
-    # 4. 原子写入：整个 config.toml 被目标内容覆盖
-    $newContent = ($switch.Content.TrimEnd()) + "`n"
+    # 4. 原子写入：整个 config.toml 被目标内容覆盖（与 Linux cp 一致：原样保留，不 TrimEnd）
+    $newContent = $switch.Content
     $tmp = "$($script:ConfigPath).tmp"
     try {
         [System.IO.File]::WriteAllText($tmp, $newContent, [System.Text.UTF8Encoding]::new($false))
@@ -615,11 +635,7 @@ function Invoke-Use {
         throw
     }
 
-    $mode = if ($switch.Source -eq 'state') { '状态恢复' } else { '模板初始化' }
-    $lineCount = ($newContent -split [char]10).Count
-    Write-ColorOutput "✅ 已切换到: $Name（$mode，$lineCount 行）" Green
-
-    # 5.5 同步 auth.json（内容永不打印；无记录则清空防凭据串用）
+    # 5. 同步 auth.json（内容永不打印；无记录则清空防凭据串用）
     $auth = Get-SwitchAuth -Name $Name -ModelsDir $script:ModelsDir -StateDir $script:StateDir
     if ($null -ne $auth.Source) {
         $authTmp = "$($script:AuthPath).tmp"
@@ -634,14 +650,20 @@ function Invoke-Use {
             if ([System.IO.File]::Exists($authTmp)) { [System.IO.File]::Delete($authTmp) }
             throw
         }
-        Write-ColorOutput "🔑 auth.json 已同步（$Name）" Green
+        Write-ColorOutput "  🔑 auth.json 已同步（$Name）" Green
     } elseif ([System.IO.File]::Exists($script:AuthPath)) {
         [System.IO.File]::Delete($script:AuthPath)
-        Write-ColorOutput "🔑 $Name 无 auth 记录，已清空 auth.json（防凭据串用）" Yellow
+        Write-ColorOutput "  🔑 $Name 无 auth 记录，已清空 auth.json（防凭据串用）" Yellow
     } else {
-        Write-ColorOutput "🔑 $Name 无 auth 记录" DarkGray
+        Write-ColorOutput "  🔑 $Name 无 auth 记录" DarkGray
     }
-    # 与 Linux 一致：只显示顶层键值（到 [section] 停、最多 15 行、掩码敏感值）
+
+    # 6. 输出（掩码密钥）：✅ 已切换 + 来源 + 📋 当前配置（与 Linux cmd_use 一致）
+    $mode = if ($switch.Source -eq 'state') { '状态恢复' } else { '模板初始化' }
+    $lineCount = [regex]::Matches($newContent, '\n').Count
+    Write-ColorOutput "  ✅ 已切换至 $Name" Green
+    Write-ColorOutput "  来源：$mode · $lineCount 行" DarkGray
+    Write-ColorOutput "" White
     Write-ColorOutput "  📋 当前配置" Cyan
     $n = 0
     foreach ($line in ($newContent -split [char]10)) {
@@ -732,6 +754,8 @@ function Write-TemplateFile {
     $path = Join-Path $ModelsDir "$Name.toml"
     $content = $Content.Replace('__MODELS_JSON__', $script:ModelsJson.Replace('\', '/'))
     $content = $content.Replace('__API_KEY__', $ApiKey)
+    # 与 Linux printf '%s\n' 一致：保证模板以换行结尾
+    if (-not $content.EndsWith("`n")) { $content += "`n" }
     [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))
     return $path
 }
@@ -749,10 +773,15 @@ function Invoke-ImportTemplate {
         [System.IO.Directory]::CreateDirectory($script:ModelsDir) | Out-Null
     }
     if ($IsWindows) {
-        Write-ColorOutput "📂 已打开: $($script:ModelsDir)" DarkGray
-        Start-Process explorer.exe $script:ModelsDir
+        # 与 Linux xdg-open 降级一致：打开失败只提示手动打开，不中断
+        try {
+            Start-Process explorer.exe $script:ModelsDir -ErrorAction Stop
+            Write-ColorOutput "  📂 已打开模板目录：$($script:ModelsDir)" DarkGray
+        } catch {
+            Write-ColorOutput "  手动打开: $($script:ModelsDir)" DarkGray
+        }
     } else {
-        Write-ColorOutput "请打开模板目录: $($script:ModelsDir)" DarkGray
+        Write-ColorOutput "  请打开模板目录: $($script:ModelsDir)" DarkGray
     }
     Write-ColorOutput "把模板 .toml 文件放进去（如有凭据可放同名 .auth.json），然后回到这里按回车" DarkGray
     $first = $true
@@ -772,33 +801,37 @@ function Invoke-ImportTemplate {
 
 # === 向导：内置 🐳 DeepSeek 模板选择 + API Key 引导 ===
 function Invoke-BuiltinTemplate {
-    Write-ColorOutput "  1) 🐳 DeepSeek-V4-Flash — 默认模型，快速，适合日常编码" White
-    Write-ColorOutput "  2) 🐳 DeepSeek-V4-Pro — 深度推理，适合复杂任务" White
-    $choice = Read-Host '选择 [1-2]'
+    Write-ColorOutput "  " White -NoNewline
+    Write-ColorOutput "1)" Green -NoNewline
+    Write-ColorOutput " 🐳 DeepSeek-V4-Flash — 默认模型，快速，适合日常编码" White
+    Write-ColorOutput "  " White -NoNewline
+    Write-ColorOutput "2)" Green -NoNewline
+    Write-ColorOutput " 🐳 DeepSeek-V4-Pro — 深度推理，适合复杂任务" White
+    $choice = Read-Host '  选择 [1-2] › '
     $name = 'deepseek'
     $content = $script:TemplateDeepseek
     switch ($choice) {
         '1' { $name = 'deepseek'     ; $content = $script:TemplateDeepseek }
         '2' { $name = 'deepseek-pro' ; $content = $script:TemplateDeepseekPro }
-        default { Write-ColorOutput "无效选择，默认使用 DeepSeek-V4-Flash" Yellow }
+        default { Write-ColorOutput "  无效选择，默认使用 DeepSeek-V4-Flash" Yellow }
     }
 
     Write-ColorOutput "" White
-    Write-ColorOutput "🔑 DeepSeek API Key" Cyan
-    Write-ColorOutput "在 platform.deepseek.com/api_keys 创建，可留空稍后手动填入模板" DarkGray
-    $key = Read-Secret 'API Key: '
+    Write-ColorOutput "  🔑 DeepSeek API Key" Cyan
+    Write-ColorOutput "  在 platform.deepseek.com/api_keys 创建，可留空稍后手动填入模板" DarkGray
+    $key = Read-Secret '  API Key › '
 
     $path = Write-TemplateFile -Name $name -Content $content -ApiKey $key -ModelsDir $script:ModelsDir
-    Write-ColorOutput "✅ 模板已创建: $path" Green
+    Write-ColorOutput "  ✅ 模板已创建：$path" Green
     $jsonPath = Write-ModelsJsonFile -Path $script:ModelsJson
-    Write-ColorOutput "✅ 模型目录已写入: $jsonPath" Green
+    Write-ColorOutput "  ✅ 模型目录已写入：$jsonPath" Green
 
     if (-not [System.IO.File]::Exists($script:ConfigPath)) {
-        Write-ColorOutput "未发现 config.toml，已直接初始化为该模板" DarkGray
+        Write-ColorOutput "  未发现 config.toml，已直接初始化为该模板" DarkGray
         $tpl = [System.IO.File]::ReadAllText($path, [System.Text.UTF8Encoding]::new($false))
         [System.IO.File]::WriteAllText($script:ConfigPath, $tpl, [System.Text.UTF8Encoding]::new($false))
     } else {
-        $ans = Read-Host '是否立即切换到该模板？[y/N]'
+        $ans = Read-Host '  是否立即切换到该模板？[y/N] › '
         if ($ans -eq 'y' -or $ans -eq 'Y') { Invoke-Use -Name $name }
     }
     return $true
@@ -806,21 +839,21 @@ function Invoke-BuiltinTemplate {
 
 # === 首次使用向导 ===
 function Invoke-FirstRun {
-    Write-ColorOutput "🚀 首次使用 · codex-swap 初始化向导" Cyan
+    Write-ColorOutput "  🚀 首次使用 · codex-swap 初始化向导" Cyan
     Write-ColorOutput "  引导完成 Codex 检查、模型模板与 API Key 配置" DarkGray
     Write-ColorOutput "" White
 
     # ① codex CLI 检查（未安装：输出官方安装命令，可代执行；不装则退出向导）
     $hints = Get-CodexInstallHint
     if ($null -ne $hints) {
-        Write-ColorOutput "⚠️ 未检测到 codex CLI，首次使用需要先安装" Yellow
+        Write-ColorOutput "  ⚠️ 未检测到 codex CLI，首次使用需要先安装" Yellow
         Write-ColorOutput "" White
-        Write-ColorOutput "安装命令（官方独立安装器）：" Green
+        Write-ColorOutput "  安装命令（官方独立安装器）：" Green
         foreach ($h in $hints) { Write-ColorOutput "  $h" White }
         Write-ColorOutput "" White
-        $ans = Read-Host '是否现在帮你执行安装命令？[Y/n]'
+        $ans = Read-Host '  是否现在帮你执行安装命令？[Y/n] › '
         if ($ans -eq '' -or $ans -eq 'y' -or $ans -eq 'Y') {
-            Write-ColorOutput "⬇️  正在安装 codex，请稍候…" DarkGray
+            Write-ColorOutput "  ⬇️ 正在安装 codex，请稍候…" DarkGray
             if ($IsWindows) {
                 & powershell.exe -NoProfile -ExecutionPolicy ByPass -Command 'irm https://chatgpt.com/codex/install.ps1 | iex' | Out-Null
                 $installOk = ($LASTEXITCODE -eq 0)
@@ -832,57 +865,78 @@ function Invoke-FirstRun {
             }
             if ($installOk) {
                 if ($IsWindows) { $env:PATH = "${localBin};$env:PATH" } else { $env:PATH = "${localBin}:$env:PATH" }
+                # 与 Linux 一致：除 PATH 命令外，还检查 ~/.local/bin 直连路径
                 $codexCmd = Get-Command codex -ErrorAction SilentlyContinue
+                if ($null -eq $codexCmd) {
+                    $candidate = Join-Path $localBin $(if ($IsWindows) { 'codex.exe' } else { 'codex' })
+                    if ([System.IO.File]::Exists($candidate)) { $codexCmd = @{ Source = $candidate } }
+                }
                 if ($null -ne $codexCmd) {
-                    Write-ColorOutput "✅ codex 安装成功：$($codexCmd.Source)" Green
+                    Write-ColorOutput "  ✅ codex 安装成功：$($codexCmd.Source)" Green
                     return $true
                 }
-                Write-ColorOutput "⚠️ 安装完成但未找到 codex 命令，请检查 PATH 后重新运行" Yellow
+                Write-ColorOutput "  ⚠️ 安装完成但未找到 codex 命令，请检查 PATH 后重新运行" Yellow
                 return $false
             }
-            Write-ColorOutput "⚠️ 安装失败（网络或权限问题），请手动执行上面的命令" Yellow
+            Write-ColorOutput "  ⚠️ 安装失败（网络或权限问题），请手动执行上面的命令" Yellow
             return $false
         }
-        Write-ColorOutput "请手动执行上面的命令，安装完成后重新运行 codex-swap" DarkGray
+        Write-ColorOutput "  请手动执行上面的命令，安装完成后重新运行 codex-swap" DarkGray
         return $false
     }
 
     # 版本检查（DeepSeek V4 要求 >= 0.144.0）
     $verOk = Test-CodexVersion
     if ($false -eq $verOk) {
-        Write-ColorOutput "⚠️ codex 版本低于 DeepSeek V4 要求的最低版本 $($script:DeepseekMinCodex)" Yellow
+        # 与 Linux 一致：显示当前实际版本号
+        $curVer = ''
+        $out = (& codex --version 2>$null) -join ' '
+        $vm = [regex]::Match($out, '\d+\.\d+\.\d+')
+        if ($vm.Success) { $curVer = $vm.Value }
+        Write-ColorOutput "  ⚠️ codex v$curVer 低于 DeepSeek V4 要求的最低版本 $($script:DeepseekMinCodex)" Yellow
         if ($IsWindows) {
-            Write-ColorOutput '升级命令: powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"' Green
+            Write-ColorOutput '  升级命令：powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"' Green
         } else {
-            Write-ColorOutput '升级命令: curl -fsSL https://chatgpt.com/codex/install.sh | sh' Green
+            Write-ColorOutput "  升级命令：curl -fsSL https://chatgpt.com/codex/install.sh | sh" Green
         }
-        $ans = Read-Host '回车继续，q 退出升级'
+        $ans = Read-Host '  回车继续，q 退出升级 › '
         if ($ans -eq 'q' -or $ans -eq 'Q') { return $false }
     }
 
     # ② 模板来源（两分支）
-    Write-ColorOutput "📦 模型配置来源" Cyan
-    Write-ColorOutput "  1) 我有模板 — 打开目录手动导入" White
-    Write-ColorOutput "  2) DeepSeek 官方接入配置 — 🐳" White
-    Write-ColorOutput "  q) 退出向导" DarkGray
+    Write-ColorOutput "  📦 模型配置来源" Cyan
+    Write-ColorOutput "  " White -NoNewline
+    Write-ColorOutput "1)" Green -NoNewline
+    Write-ColorOutput " 我有模板 — 打开目录手动导入" White
+    Write-ColorOutput "  " White -NoNewline
+    Write-ColorOutput "2)" Green -NoNewline
+    Write-ColorOutput " DeepSeek 官方接入配置 — 🐳" White
+    Write-ColorOutput "  q 退出向导" DarkGray
     while ($true) {
-        $choice = Read-Host '选择 [1-2]'
+        $choice = Read-Host '  选择 [1-2] › '
         if ($choice -eq 'q' -or $choice -eq 'Q') { return $false }
         switch ($choice) {
             '1' {
-                if (-not (Invoke-ImportTemplate)) { Write-ColorOutput "跳过导入，进入菜单" DarkGray }
+                if (-not (Invoke-ImportTemplate)) { Write-ColorOutput "  跳过导入，进入菜单" DarkGray }
                 return $true
             }
             '2' { return (Invoke-BuiltinTemplate) }
         }
-        Write-ColorOutput "无效选择，请重试" Yellow
+        Write-ColorOutput "  无效选择，请重试" Yellow
     }
 
     Write-ColorOutput "" White
-    Write-ColorOutput "✨ 初始化完成" DarkGray
-    $ans = Read-Host '按回车进入菜单，q 退出'
+    Write-ColorOutput "  ✨ 初始化完成" DarkGray
+    $ans = Read-Host '  按回车进入菜单，q 退出 › '
     if ($ans -eq 'q' -or $ans -eq 'Q') { return $false }
     return $true
+}
+
+# === 菜单辅助：回车返回 / q 退出（与 Linux wait_for_menu 一致）===
+function Read-MenuReturn {
+    param([string]$Prompt = '  按回车返回菜单，q 退出 › ')
+    $ans = Read-Host $Prompt
+    return ($ans -ne 'q' -and $ans -ne 'Q')
 }
 
 # === 交互式菜单 ===
@@ -903,8 +957,11 @@ function Invoke-Menu {
         Write-Host "  $esc[38;2;63;174;194m🔗 项目仓库: $($script:RepoUrl)$esc[0m"
         Write-ColorOutput "" White
 
-        # 读当前 model + provider（用于标 ✅）
-        $currentContent = [System.IO.File]::ReadAllText($script:ConfigPath, [System.Text.UTF8Encoding]::new($false))
+        # 读当前 model + provider（用于标 ✅）；config 不存在时按无激活项处理
+        $currentContent = ''
+        if ([System.IO.File]::Exists($script:ConfigPath)) {
+            $currentContent = [System.IO.File]::ReadAllText($script:ConfigPath, [System.Text.UTF8Encoding]::new($false))
+        }
         $currentModel = ''
         $currentProvider = ''
         foreach ($line in ($currentContent -split [char]10)) {
@@ -920,7 +977,12 @@ function Invoke-Menu {
             Write-ColorOutput "  ❓ 模板目录为空: $($script:ModelsDir)" Yellow
             Write-ColorOutput "     手动新建 .toml 模板文件后回车刷新" DarkGray
         } else {
-            $markers = Resolve-ActiveMarkers -Files $files -ConfigPath $script:ConfigPath
+            if ([System.IO.File]::Exists($script:ConfigPath)) {
+                $markers = Resolve-ActiveMarkers -Files $files -ConfigPath $script:ConfigPath
+            } else {
+                $markers = @{}
+                foreach ($f in $files) { $markers[$f] = 'none' }
+            }
             $rows = [System.Collections.Generic.List[hashtable]]::new()
             for ($i = 0; $i -lt $files.Count; $i++) {
                 $name = [System.IO.Path]::GetFileNameWithoutExtension($files[$i])
@@ -939,8 +1001,8 @@ function Invoke-Menu {
                     Num      = "$(($i + 1))"
                     Status   = $marker
                     Name     = $name
-                    Model    = $tplModel
-                    Provider = "$(Get-ProviderIcon $tplProvider $tplModel)$tplProvider"
+                    Model    = $(if ($tplModel) { $tplModel } else { '-' })
+                    Provider = "$(Get-ProviderIcon $tplProvider $tplModel)$(if ($tplProvider) { $tplProvider } else { '-' })"
                 })
             }
 
@@ -1023,29 +1085,34 @@ function Invoke-Menu {
         if ($choice -eq 'q' -or $choice -eq 'Q') { return }
         if ([string]::IsNullOrWhiteSpace($choice)) { continue }
 
-        # 字母 o：在 Windows 资源管理器中打开模板目录
+        # 字母 o：在 Windows 资源管理器中打开模板目录（失败降级提示，与 Linux xdg-open 一致）
         if ($choice -eq 'o' -or $choice -eq 'O') {
             if (-not [System.IO.Directory]::Exists($script:ModelsDir)) {
-                Write-ColorOutput "❌ 目录不存在: $($script:ModelsDir)" Yellow
+                Write-ColorOutput "  ❌ 目录不存在: $($script:ModelsDir)" Yellow
             } else {
-                Write-ColorOutput "📂 已打开: $($script:ModelsDir)" DarkGray
-                Start-Process explorer.exe $script:ModelsDir
+                try {
+                    Start-Process explorer.exe $script:ModelsDir -ErrorAction Stop
+                    Write-ColorOutput "  📂 已打开: $($script:ModelsDir)" DarkGray
+                } catch {
+                    Write-ColorOutput "  手动打开: $($script:ModelsDir)" DarkGray
+                }
             }
             Write-ColorOutput "" White
             continue
         }
 
-        # 字母 u：检查并升级
+        # 字母 u：检查并升级（成功后重启进程加载新版本，与 Linux exec 重载一致）
         if ($choice -eq 'u' -or $choice -eq 'U') {
             Invoke-Update
-            Read-Host "`n按回车返回菜单"
-            continue
+            if (-not (Read-MenuReturn '  按回车重新加载菜单，q 退出 › ')) { return }
+            & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'codex-swap.ps1') menu
+            return
         }
 
         $idx = 0
         if (-not [int]::TryParse($choice, [ref]$idx) -or $idx -lt 1 -or $idx -gt $files.Count) {
-            Write-ColorOutput "❌ 无效: $choice" Red
-            Read-Host "`n按回车返回菜单"
+            Write-ColorOutput "  ❌ 无效: $choice" Yellow
+            if (-not (Read-MenuReturn)) { return }
             continue
         }
 
@@ -1053,10 +1120,10 @@ function Invoke-Menu {
         try {
             Invoke-Use -Name $name
         } catch {
-            Write-ColorOutput "❌ 切换失败: $_" Red
+            Write-ColorOutput "  ❌ 切换失败: $_" Red
         }
         # 停留展示切换结果，回车后清屏重绘菜单
-        Read-Host "`n按回车返回菜单"
+        if (-not (Read-MenuReturn)) { return }
     }
 }
 
@@ -1101,17 +1168,18 @@ function Get-LatestReleaseInfo {
 }
 
 function Invoke-Update {
-    Write-ColorOutput "🔎 检查更新 (v$($script:ScriptVersion))..." DarkGray
+    # 与 Linux cmd_update 一致：文案/颜色/顺序对齐
+    Write-ColorOutput "  🔎 检查更新 · 当前 v$($script:ScriptVersion)" DarkGray
     $sourceVersion = Get-SourceVersion
     if ([string]::IsNullOrWhiteSpace($sourceVersion)) {
         throw '无法获取有效 VERSION（网络问题或 GitHub 限流）'
     }
     $cmp = Compare-Version -A $sourceVersion -B $script:ScriptVersion
     if ($cmp -le 0) {
-        Write-ColorOutput "✅ 已是最新版本 v$($script:ScriptVersion)" Green
+        Write-ColorOutput "  ✅ 已是最新版本 v$($script:ScriptVersion)" Green
         return
     }
-    Write-ColorOutput "发现新版本: v$sourceVersion（当前 v$($script:ScriptVersion)）" Yellow
+    Write-ColorOutput "  🚀 发现新版本 · v$sourceVersion" Yellow
 
     $info = Get-LatestReleaseInfo
     if ($null -eq $info) {
@@ -1134,7 +1202,7 @@ function Invoke-Update {
     $zipPath = Join-Path $tmpDir 'update.zip'
     $extract = Join-Path $tmpDir 'extract'
     try {
-        Write-ColorOutput "⬇️  下载 $($script:ReleaseAsset)..." DarkGray
+        Write-ColorOutput "  ⬇️ 正在下载更新" DarkGray
         Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zipPath -TimeoutSec 120
         Expand-Archive -Path $zipPath -DestinationPath $extract -Force
 
@@ -1157,7 +1225,7 @@ function Invoke-Update {
         try {
             Copy-Item (Join-Path $extract '*') $root -Recurse -Force
             Import-Module (Join-Path $root 'src\codex-swap.psm1') -Force -ErrorAction Stop
-            Write-ColorOutput "✅ 已升级到 v$sourceVersion" Green
+            Write-ColorOutput "  ✅ 已升级至 v$sourceVersion" Green
             Remove-Item $old -Recurse -Force
         } catch {
             # 回滚
@@ -1172,35 +1240,22 @@ function Invoke-Update {
 
 # === 体检 ===
 function Invoke-Doctor {
-    Write-ColorOutput "🩺 codex-swap v$($script:ScriptVersion) 体检" Cyan
-    Write-ColorOutput ("=" * 50) DarkGray
-
+    # 与 Linux cmd_doctor 对齐：固定检查项（PowerShell 7+ 对应"bash 原生实现"；
+    # curl/unzip 是 Linux 平台依赖，Windows 用内置 cmdlet 无对应项）
+    Write-ColorOutput "  🩺 codex-swap v$($script:ScriptVersion) 体检" Cyan
     $ok = 0; $bad = 0
-    function _Check([string]$Name, [bool]$Cond) {
-        if ($Cond) { $script:ok++; Write-ColorOutput "  ✅ $Name" Green }
-        else { $script:bad++; Write-ColorOutput "  ❌ $Name" Red }
-    }
-    # 注意: 函数内 $script:ok 引用模块 scope 变量，直接内联计数
-    $checks = [System.Collections.Generic.List[object]]::new()
-    $checks.Add(@{ Name = "PowerShell 7+（当前 $($PSVersionTable.PSVersion)）"; Cond = ($PSVersionTable.PSVersion.Major -ge 7) })
-    $checks.Add(@{ Name = "数据目录: $($script:CodexHome)"; Cond = [System.IO.Directory]::Exists($script:CodexHome) })
-    $checks.Add(@{ Name = "config.toml 存在"; Cond = [System.IO.File]::Exists($script:ConfigPath) })
-    $checks.Add(@{ Name = "模板目录 models/"; Cond = [System.IO.Directory]::Exists($script:ModelsDir) })
-    if ([System.IO.Directory]::Exists($script:ModelsDir)) {
-        $tplCount = ([System.IO.Directory]::GetFiles($script:ModelsDir, '*.toml')).Count
-        $checks.Add(@{ Name = "模板数量: $tplCount 个"; Cond = ($tplCount -gt 0) })
-    }
-    $checks.Add(@{ Name = "状态目录 model-states/"; Cond = [System.IO.Directory]::Exists($script:StateDir) })
-    if ([System.IO.Directory]::Exists($script:StateDir)) {
-        $stCount = ([System.IO.Directory]::GetFiles($script:StateDir, '*.toml')).Count
-        $checks.Add(@{ Name = "状态数量: $stCount 个"; Cond = ($stCount -gt 0) })
-    }
+    $checks = @(
+        @{ Name = "PowerShell 7+（当前 $($PSVersionTable.PSVersion)）"; Cond = ($PSVersionTable.PSVersion.Major -ge 7) },
+        @{ Name = "数据目录: $($script:CodexHome)"; Cond = [System.IO.Directory]::Exists($script:CodexHome) },
+        @{ Name = "config.toml 存在"; Cond = [System.IO.File]::Exists($script:ConfigPath) },
+        @{ Name = "模板目录 models/"; Cond = [System.IO.Directory]::Exists($script:ModelsDir) },
+        @{ Name = "状态目录 model-states/"; Cond = [System.IO.Directory]::Exists($script:StateDir) }
+    )
     foreach ($c in $checks) {
         if ($c.Cond) { $ok++; Write-ColorOutput "  ✅ $($c.Name)" Green }
         else { $bad++; Write-ColorOutput "  ❌ $($c.Name)" Red }
     }
-    Write-ColorOutput ("=" * 50) DarkGray
-    Write-ColorOutput "通过 $ok / $($ok + $bad)" $(if ($bad -eq 0) { 'Green' } else { 'Yellow' })
+    Write-ColorOutput "  通过 $ok / $($ok + $bad)" White
 }
 
 # === 卸载：删除本机安装（启动器 + 快捷命令 + 程序目录），数据目录 ~/.codex 不动 ===
@@ -1219,10 +1274,15 @@ function Invoke-Uninstall {
 }
 
 # === 主分发 ===
+function Show-HelpText {
+    Write-ColorOutput "用法: codex-swap [use <name>] | [list] | [current] | [update] | [doctor] | [uninstall] | [help]" White
+    Write-ColorOutput "      菜单内: o 打开模板目录，u 检查并升级" DarkGray
+    Write-ColorOutput "      首次运行（模板目录为空）自动进入初始化向导" DarkGray
+}
+
 function Invoke-CodexSwap {
     param(
         [Parameter(Position = 0)]
-        [ValidateSet('list', 'current', 'use', 'update', 'doctor', 'uninstall', 'help', 'menu')]
         [string]$Command = 'menu',
 
         [Parameter(Position = 1)]
@@ -1230,11 +1290,7 @@ function Invoke-CodexSwap {
     )
     try {
         switch ($Command) {
-            'help' {
-                Write-ColorOutput "用法: codex-swap [use <name>] | [list] | [current] | [update] | [doctor] | [uninstall] | [help]" White
-                Write-ColorOutput "      菜单内: o 打开模板目录" DarkGray
-                Write-ColorOutput "      首次运行（模板目录为空）自动进入初始化向导" DarkGray
-            }
+            'help' { Show-HelpText }
             'menu' { Invoke-Menu }
             'list' { Invoke-List }
             'current' { Invoke-Current }
@@ -1247,10 +1303,16 @@ function Invoke-CodexSwap {
                 }
                 Invoke-Use -Name $Name
             }
-            default { Invoke-Menu }
+            # 与 Linux 一致：未知命令 → 中文提示 + help
+            default {
+                Write-ColorOutput "  ❌ 未知命令: $Command" Yellow
+                Show-HelpText
+            }
         }
     } catch {
-        Write-Host "❌ 错误: $_" -ForegroundColor Red
+        Write-Host "  ❌ 错误: $_" -ForegroundColor Red
+        # 与 Linux fail() 一致：致命错误以非零退出码结束
+        exit 1
     }
 }
 
