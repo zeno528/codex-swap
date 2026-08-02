@@ -66,12 +66,10 @@ Write-Ok "PowerShell $($PSVersionTable.PSVersion)"
 # ---------- 获取 Release ----------
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $relUrl = "https://api.github.com/repos/$RepoOwner/$RepoName/releases/latest"
-    $label = '最新版'
 } else {
     $relUrl = "https://api.github.com/repos/$RepoOwner/$RepoName/releases/tags/$Version"
-    $label = "指定版 $Version"
 }
-Write-Step "获取 GitHub Release（$label）..."
+Write-Step "获取 Release 并下载..."
 $release = $null
 try {
     $release = Invoke-RestMethod -Uri $relUrl -Headers @{ 'User-Agent' = 'codex-swap-installer' } -TimeoutSec 20
@@ -85,7 +83,6 @@ if ($null -eq $asset) {
     Write-Bad "Release $tag 缺少资产 $AssetName"
     exit 1
 }
-Write-Ok "Release $tag"
 
 # ---------- 确认 ----------
 if (-not $Yes) {
@@ -99,7 +96,6 @@ $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-swap-install-" + [
 $zipPath = Join-Path $tmpDir $AssetName
 $extract = Join-Path $tmpDir 'extract'
 try {
-    Write-Step "下载 $($asset.name) ($([math]::Round($asset.size/1KB)) KB)..."
     Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zipPath -TimeoutSec 120
     Expand-Archive -Path $zipPath -DestinationPath $extract -Force
 
@@ -109,14 +105,14 @@ try {
         Write-Bad "下载包结构不完整（缺 src/codex-swap.psm1 或 bin/codex-swap.cmd）"
         exit 1
     }
-    Write-Ok "下载并解压完成"
+    Write-Ok "下载与解压完成"
 
     # ---------- 安装（备份旧版） ----------
     if (Test-Path $InstallRoot) {
         $old = "$InstallRoot.old"
         if (Test-Path $old) { Remove-Item $old -Recurse -Force }
         Rename-Item $InstallRoot $old
-        Write-Step "旧版本已备份为 $old"
+        Write-Step "旧版本已备份"
     }
     [System.IO.Directory]::CreateDirectory($InstallRoot) | Out-Null
     Copy-Item (Join-Path $extract '*') $InstallRoot -Recurse -Force
@@ -128,15 +124,14 @@ try {
     # ---------- 启动器 + PATH ----------
     $shim = "@echo off`r`nrem codex-swap launcher (Windows)`r`npwsh -NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\src\codex-swap.ps1`" %*`r`n"
     [System.IO.File]::WriteAllText($ShimPath, $shim, [System.Text.UTF8Encoding]::new($false))
-    Write-Ok "启动器 $ShimPath"
 
     $swShim = "@echo off`r`nrem codex-swap launcher (Windows)`r`npwsh -NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\src\codex-swap.ps1`" %*`r`n"
     if (-not (Test-Path $SwShimPath) -or ([System.IO.File]::ReadAllText($SwShimPath) -match 'codex-swap launcher')) {
         [System.IO.File]::WriteAllText($SwShimPath, $swShim, [System.Text.UTF8Encoding]::new($false))
-        Write-Ok "快捷命令 $SwShimPath"
     } else {
         Write-Host "  ⚠️ 快捷命令未创建：$SwShimPath 已被占用" -ForegroundColor Yellow
     }
+    Write-Ok "启动器与快捷命令已写入"
 
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if (-not ($userPath -split ';' | Where-Object { $_.TrimEnd('\') -ieq $BinDir.TrimEnd('\') })) {

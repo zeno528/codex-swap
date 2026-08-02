@@ -6,7 +6,7 @@
 
 模板播种 + 状态恢复：每个模型独立维护自己最新的完整配置，来回切换不丢使用记录、互不污染。
 
-[![License](https://img.shields.io/github/license/zeno528/codex-swap?label=License)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-3FAEC2)](LICENSE)
 ![平台](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%2FWSL2-3FAEC2)
 ![运行时](https://img.shields.io/badge/PowerShell%207%20%C2%B7%20Bash-3FAEC2)
 
@@ -30,27 +30,11 @@ bash <(curl -fsSL https://raw.githubusercontent.com/zeno528/codex-swap/main/linu
 
 ### 🗑️ 卸载
 
-卸载只删除程序本体与快捷命令，数据目录 `~/.codex`（models/model-states/auth）全程不受影响。
-
-Linux / WSL2：
-
 ```bash
-# 安装器自带卸载（无确认，直接删）
-bash <(curl -fsSL https://raw.githubusercontent.com/zeno528/codex-swap/main/linux/install.sh) --uninstall
-
-# 独立卸载器（带 [y/N] 确认）
-bash <(curl -fsSL https://raw.githubusercontent.com/zeno528/codex-swap/main/linux/uninstall.sh)
+codex-swap uninstall
 ```
 
-Windows · PowerShell 7：
-
-```powershell
-# 安装器自带卸载（无确认，直接删）
-Invoke-RestMethod https://raw.githubusercontent.com/zeno528/codex-swap/main/windows/install.ps1 -OutFile "$env:TEMP\codex-swap-install.ps1"; & "$env:TEMP\codex-swap-install.ps1" -Uninstall
-
-# 独立卸载器（带 [y/N] 确认，加 -Yes 跳过）
-Invoke-RestMethod https://raw.githubusercontent.com/zeno528/codex-swap/main/windows/uninstall.ps1 -OutFile "$env:TEMP\codex-swap-uninstall.ps1"; & "$env:TEMP\codex-swap-uninstall.ps1"
-```
+卸载只删除程序本体与快捷命令，数据目录 `~/.codex`（models/model-states/auth）不受影响。
 
 ## 🚀 使用
 

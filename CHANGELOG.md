@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.47] - 2026-08-02
+
+- refactor: 优化卸载功能的提示信息和 README 文档，更新 .gitignore
+
+
 ## [0.2.46] - 2026-08-02
 
 - fix: 修复 Windows 自更新 Copy-Item 通配符复制失败

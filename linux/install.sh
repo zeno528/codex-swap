@@ -43,48 +43,45 @@ if [ -n "$VERSION" ]; then
 else
     REL_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
 fi
-echo "  获取 GitHub Release..."
+echo "  获取 Release 并下载..."
 JSON="$(curl -fsSL -H 'User-Agent: codex-swap-installer' "$REL_URL")" || fail "获取 Release 失败（网络或限流）"
 TAG="$(printf '%s' "$JSON" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
 URL="$(printf '%s' "$JSON" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*codex-swap-linux\.zip"' | head -n1 | sed 's/.*"\(http[^"]*\)".*/\1/')"
 [ -n "$TAG" ] && [ -n "$URL" ] || fail "Release 缺少资产 $ASSET_NAME"
-say "Release $TAG"
 
 # ---------- 下载 ----------
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-echo "  下载 $ASSET_NAME..."
 curl -fsSL -o "$TMP/$ASSET_NAME" "$URL" || fail "下载失败"
 unzip -qo "$TMP/$ASSET_NAME" -d "$TMP/x" || fail "解压失败"
 NEW="$TMP/x/codex-swap"
 [ -f "$NEW" ] || fail "包内缺少 codex-swap 主脚本"
 bash -n "$NEW" || fail "主脚本语法校验失败"
-say "下载并语法校验通过"
+say "下载与语法校验通过"
 
 # ---------- 安装 ----------
 mkdir -p "$BIN_DIR"
 if [ -f "$LAUNCHER" ]; then
     cp "$LAUNCHER" "$LAUNCHER.old"
-    warn "旧版本已备份为 $LAUNCHER.old"
+    warn "旧版本已备份"
 fi
 cp "$NEW" "$LAUNCHER"
 chmod +x "$LAUNCHER"
-say "启动器 $LAUNCHER"
 
 if [ -e "$SHORTCUT" ] || [ -L "$SHORTCUT" ]; then
     if [ -L "$SHORTCUT" ] && [ "$(readlink "$SHORTCUT")" = "codex-swap" ]; then
-        say "快捷命令 $SHORTCUT"
+        :
     else
         warn "快捷命令未创建：$SHORTCUT 已被占用"
     fi
 else
     ln -s "codex-swap" "$SHORTCUT"
-    say "快捷命令 $SHORTCUT"
 fi
+say "启动器与快捷命令已写入"
 
 # ---------- PATH ----------
 case ":$PATH:" in
-    *":$BIN_DIR:"*) say "$BIN_DIR 已在 PATH 中" ;;
+    *":$BIN_DIR:"*) say "~/.local/bin 已在 PATH 中" ;;
     *)
         printf '\n# codex-swap\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME/.bashrc"
         [ -f "$HOME/.zshrc" ] && printf '\n# codex-swap\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME/.zshrc"

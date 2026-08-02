@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.46'
+$script:ScriptVersion = '0.2.47'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -1267,14 +1267,18 @@ function Invoke-Uninstall {
     $shimPath = Join-Path $env:USERPROFILE '.local\bin\codex-swap.cmd'
     $swShimPath = Join-Path $env:USERPROFILE '.local\bin\sw.cmd'
     $installRoot = Join-Path $env:USERPROFILE '.local\bin\codex-swap'
-    Write-ColorOutput "🗑️  将删除: $shimPath、$swShimPath、$installRoot" Yellow
-    $ans = Read-Host '确认卸载 codex-swap？（数据目录 ~/.codex 不受影响）[y/N]'
-    if ($ans -notmatch '^(y|Y|yes)$') { Write-ColorOutput '已取消' Yellow; return }
+    Write-ColorOutput "  🗑️  将删除：" Yellow
+    $targets = @($shimPath, $swShimPath, $installRoot)
+    for ($i = 0; $i -lt $targets.Count; $i++) {
+        Write-ColorOutput "    $($i + 1). $($targets[$i])" DarkGray
+    }
+    $ans = Read-Host '  确认卸载 codex-swap？（数据目录 ~/.codex 不受影响）[y/N] › '
+    if ($ans -notmatch '^(y|Y|yes)$') { Write-ColorOutput "  已取消" Yellow; return }
     foreach ($p in @($shimPath, $swShimPath, $installRoot)) {
         if (Test-Path $p) { Remove-Item $p -Force -Recurse }
     }
-    Write-ColorOutput '✅ 已卸载 codex-swap' Green
-    Write-ColorOutput 'ℹ️  数据目录 ~/.codex 未动（models/model-states 完好）' DarkGray
+    Write-ColorOutput "  ✅ 已卸载 codex-swap" Green
+    Write-ColorOutput "  ℹ️  数据目录 ~/.codex 未动（models/model-states 完好，可自行删除）" DarkGray
 }
 
 # === 主分发 ===

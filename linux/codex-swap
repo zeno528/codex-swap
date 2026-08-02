@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.46"
+VERSION="0.2.47"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -415,10 +415,10 @@ cmd_uninstall() {
     local self shortcut
     self="$(readlink -f "$0")"
     shortcut="$(dirname "$self")/sw"
+    printf "${YELLOW}  🗑️  将删除：${C}\n"
+    printf "${DGRAY}    1. %s${C}\n" "$self"
     if [ -L "$shortcut" ] && [ "$(readlink "$shortcut")" = "codex-swap" ]; then
-        printf "${YELLOW}  🗑️  将删除: %s、%s${C}\n" "$self" "$shortcut"
-    else
-        printf "${YELLOW}  🗑️  将删除: %s${C}\n" "$self"
+        printf "${DGRAY}    2. %s${C}\n" "$shortcut"
     fi
     read -r -p "  确认卸载 codex-swap？（数据目录 ~/.codex 不受影响）[y/N] › " ans || { printf "\n"; return 1; }
     case "$ans" in
@@ -428,7 +428,7 @@ cmd_uninstall() {
                 rm -f "$shortcut"
             fi
             printf "${GREEN}  ✅ 已卸载 codex-swap${C}\n"
-            echo "  ℹ️  数据目录 ~/.codex 未动（models/model-states 完好）"
+            echo "  ℹ️  数据目录 ~/.codex 未动（models/model-states 完好，可自行删除）"
             ;;
         *) warn "  已取消" ;;
     esac
