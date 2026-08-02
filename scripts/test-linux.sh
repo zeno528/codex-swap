@@ -73,8 +73,7 @@ mkdir -p "$fake_bin"
 cat > "$fake_bin/curl" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
-    *'/VERSION'*) printf '0.2.3\n' ;;
-    *'/releases/latest') printf '%s\n' '{"tag_name":"v0.2.0"}' ;;
+    *'/releases/latest') printf '%s\n' '{"tag_name":"v0.2.3"}' ;;
     *) exit 1 ;;
 esac
 EOF
