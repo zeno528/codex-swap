@@ -249,7 +249,7 @@ Assert-True ($manifestText -match "PowerShellVersion\s*=\s*'5\.1'") '模块最�
 Assert-True ($moduleText -match 'IsWindowsPlatform' -and $moduleText -notmatch '\$IsWindows\b') 'Windows 判断不依赖 PowerShell 6+ 自动变量'
 Assert-True ($cmdText -match 'where pwsh' -and $cmdText -match 'powershell\.exe') '启动器优先 pwsh、回退 powershell.exe'
 Assert-True ($installCoreText -match '需要 PowerShell 5\.1\+' -and $installCoreText -match 'where pwsh') '核心安装器支持 5.1 并生成兼容启动器'
-Assert-True ($installText -match 'install-core\.ps1' -and $installText -match 'scriptblock::Create' -and $installText -match 'FEFF') 'ASCII 引导器移除 BOM 并加载核心安装器'
+Assert-True ($installText -match 'install-core\.ps1' -and $installText -match '\[scriptblock\]::Create' -and $installText -match 'FEFF') 'ASCII 引导器移除 BOM 并加载核心安装器'
 Assert-True ($moduleText -match 'Invoke-WebRequest -UseBasicParsing' -and $installCoreText -match 'Invoke-WebRequest -UseBasicParsing') '下载路径显式使用安全的基础解析'
 
 Write-Host "`n=== Test 17: PowerShell 5.1 脚本编码 ===" -ForegroundColor Cyan
