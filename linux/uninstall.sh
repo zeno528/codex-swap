@@ -24,7 +24,7 @@ case "$ans" in
             rm -f "$SHORTCUT"
             printf '\033[32m✅ 已删除快捷命令 %s\033[0m\n' "$SHORTCUT"
         fi
-        echo "  数据目录 ~/.codex 未动（models/model-states 完好）"
+        echo "  ℹ️  数据目录 ~/.codex 未动（models/model-states 完好，可自行删除）"
         ;;
     *) echo "已取消" ;;
 esac

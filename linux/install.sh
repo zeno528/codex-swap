@@ -26,7 +26,7 @@ if [ "${1:-}" = "--uninstall" ]; then
     if [ -L "$SHORTCUT" ] && [ "$(readlink "$SHORTCUT")" = "codex-swap" ]; then
         rm -f "$SHORTCUT" && say "已删除快捷命令 $SHORTCUT"
     fi
-    echo "  数据目录 ~/.codex 未动（models/model-states 完好）"
+    echo "  ℹ️  数据目录 ~/.codex 未动（models/model-states 完好，可自行删除）"
     exit 0
 fi
 

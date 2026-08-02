@@ -49,7 +49,7 @@ if ($Uninstall) {
     if (Test-Path $SwShimPath) { Remove-Item $SwShimPath -Force; $removed++; Write-Ok "已删除快捷命令 $SwShimPath" }
     if (Test-Path $InstallRoot) { Remove-Item $InstallRoot -Recurse -Force; $removed++; Write-Ok "已删除程序目录 $InstallRoot" }
     if ($removed -eq 0) { Write-Host "  未发现已安装的 codex-swap" -ForegroundColor Yellow }
-    Write-Host "  ℹ️  数据目录 ~/.codex 未动（models/model-states 完好）" -ForegroundColor DarkGray
+    Write-Host "  ℹ️  数据目录 ~/.codex 未动（models/model-states 完好，可自行删除）" -ForegroundColor DarkGray
     return
 }
 

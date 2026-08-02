@@ -42,4 +42,4 @@ if (Test-Path $InstallRoot) {
     Remove-Item $InstallRoot -Recurse -Force
     Write-Host "✅ 已删除 $InstallRoot" -ForegroundColor Green
 }
-Write-Host "ℹ️  数据目录 ~/.codex 未动（models/model-states 完好）" -ForegroundColor DarkGray
+Write-Host "  ℹ️  数据目录 ~/.codex 未动（models/model-states 完好，可自行删除）" -ForegroundColor DarkGray
