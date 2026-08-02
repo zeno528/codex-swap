@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.64"
+VERSION="0.2.65"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -778,12 +778,16 @@ wizard_builtin_template() {
 
     wizard_divider
     printf "  ${CYAN}🔑 DeepSeek API Key${C}\n"
-    printf "  ${DGRAY}在 ${CYAN}https://platform.deepseek.com/api_keys${C}${DGRAY} 创建，可留空稍后手动填入模板${C}\n"
+    printf "  ${DGRAY}在 ${CYAN}https://platform.deepseek.com/api_keys${C}${DGRAY}创建${C}\n"
+    printf "  ${DGRAY}可留空稍后手动填入模板${C}\n"
     read_secret "  API Key › "
     key="$SECRET_INPUT"
+    if [ -z "$key" ]; then
+        key="<你的 DeepSeek API Key>"
+    fi
 
     wizard_divider
-    printf "  ${CYAN}📛 模板名称${C}\n"
+    printf "  ${CYAN}🏷️ 模板名称${C}\n"
     printf "  ${DGRAY}默认 ${name} · 直接回车使用；重名时可覆盖或改名${C}\n"
     while true; do
         read -r -p "  名称 › " input || { printf "\n"; return 1; }

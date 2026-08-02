@@ -123,6 +123,12 @@ grep -q 'deepseek-v4-flash' "$wizard_home/config.toml"
 grep -q 'deepseek-v4-flash' "$wizard_home/models.json"
 grep -q 'deepseek-v4-pro' "$wizard_home/models.json"
 
+# 未填 API Key：写入官方占位符 <你的 DeepSeek API Key>
+empty_home="$test_root/emptykey"
+mkdir -p "$empty_home"
+output="$(printf '1\n\n\n\nq\n' | CODEX_HOME="$empty_home" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
+grep -q '你的 DeepSeek API Key' "$empty_home/models/deepseek.toml"
+
 # 菜单内 N 新建配置：已有模板时仍能进入 DeepSeek 向导（默认 Flash，不覆盖现有配置）
 new_home="$test_root/newcfg"
 mkdir -p "$new_home/models" "$new_home/model-states"

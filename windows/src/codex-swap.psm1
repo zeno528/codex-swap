@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.64'
+$script:ScriptVersion = '0.2.65'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -832,12 +832,14 @@ function Invoke-BuiltinTemplate {
     Write-ColorOutput "" White
     Write-ColorOutput "  🔑 DeepSeek API Key" Cyan
     Write-ColorOutput "  在 " DarkGray -NoNewline
-    Write-ColorOutput "https://platform.deepseek.com/api_keys" Cyan
-    Write-ColorOutput " 创建，可留空稍后手动填入模板" DarkGray
+    Write-ColorOutput "https://platform.deepseek.com/api_keys" Cyan -NoNewline
+    Write-ColorOutput "创建" DarkGray
+    Write-ColorOutput "  可留空稍后手动填入模板" DarkGray
     $key = Read-Secret '  API Key › '
+    if ([string]::IsNullOrWhiteSpace($key)) { $key = '<你的 DeepSeek API Key>' }
 
     Write-WizardDivider
-    Write-ColorOutput "  📛 模板名称" Cyan
+    Write-ColorOutput "  🏷️ 模板名称" Cyan
     Write-ColorOutput "  默认 $name · 直接回车使用；重名时可覆盖或改名" DarkGray
     while ($true) {
         $input = Read-Host '  名称 › '
@@ -1067,7 +1069,8 @@ function Invoke-Menu {
                 })
             }
 
-            # 表格渲染（与 Linux 分支一致：固定列宽、编号/状态居中、激活行粗体绿）
+            # 表格渲染（与 Linux 分支一致：标题、固定列宽、编号/状态居中、激活行粗体绿）
+            Write-Host "  $esc[1;38;2;63;174;194m🔍 模型配置$esc[0m"
             $headers = @('编号', '状态', '名称', '模型', '供应商')
             $keys    = @('Num',  'Status', 'Name', 'Model', 'Provider')
             $widths  = @(4, 6, 16, 26, 14)
@@ -1086,8 +1089,8 @@ function Invoke-Menu {
                 return $line + $R
             }
             function Write-DataRow($Values, $Bold) {
-                $valColor = if ($Bold) { $boldGreen } else { '' }
-                $sb = "$gray│$valColor"
+                $valColor = if ($Bold) { $boldGreen } else { "$esc[37m" }
+                $sb = "  $gray│$valColor"
                 for ($i = 0; $i -lt $colCount; $i++) {
                     $val = [string]$Values[$i]
                     $pad = $widths[$i] - (Get-DisplayWidth $val)
@@ -1106,7 +1109,7 @@ function Invoke-Menu {
                 Write-Host $sb
             }
             function Write-HeadRow($Values) {
-                $sb = "$gray│$boldCyan"
+                $sb = "  $gray│$boldCyan"
                 for ($i = 0; $i -lt $colCount; $i++) {
                     $val = [string]$Values[$i]
                     $pad = $widths[$i] - (Get-DisplayWidth $val)
@@ -1124,17 +1127,15 @@ function Invoke-Menu {
                 $sb += "$reset$gray│$reset"
                 Write-Host $sb
             }
-            Write-Host "$gray$(_HLine '╭' '┬' '╮')$reset"
+            Write-Host "  $gray$(_HLine '╭' '┬' '╮')$reset"
             Write-HeadRow $headers
-            Write-Host "$gray$(_HLine '├' '┼' '┤')$reset"
+            Write-Host "  $gray$(_HLine '├' '┼' '┤')$reset"
             foreach ($r in $rows) {
                 $vals = @(); foreach ($k in $keys) { $vals += $r[$k] }
                 Write-DataRow $vals ($r.Status -eq '✅')
             }
-            Write-Host "$gray$(_HLine '╰' '┴' '╯')$reset"
+            Write-Host "  $gray$(_HLine '╰' '┴' '╯')$reset"
         }
-
-        Write-Host ''
 
         Write-ColorOutput "  操作：N 新建配置 · U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出" DarkGray
         Write-ColorOutput "" White
