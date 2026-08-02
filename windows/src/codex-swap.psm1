@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.45'
+$script:ScriptVersion = '0.2.46'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -1223,7 +1223,11 @@ function Invoke-Update {
         Rename-Item $root $old
 
         try {
-            Copy-Item (Join-Path $extract '*') $root -Recurse -Force
+            # 显式创建目标目录后逐项复制：避免 Copy-Item 通配符 + 目标目录不存在时的
+            # 已知 bug（"Container cannot be copied onto existing leaf item"，见 powershell/powershell#27478）
+            [System.IO.Directory]::CreateDirectory($root) | Out-Null
+            Copy-Item (Join-Path $extract 'src') (Join-Path $root 'src') -Recurse -Force
+            Copy-Item (Join-Path $extract 'bin') (Join-Path $root 'bin') -Recurse -Force
             Import-Module (Join-Path $root 'src\codex-swap.psm1') -Force -ErrorAction Stop
             Write-ColorOutput "  ✅ 已升级至 v$sourceVersion" Green
             Remove-Item $old -Recurse -Force

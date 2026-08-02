@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.46] - 2026-08-02
+
+- fix: 修复 Windows 自更新 Copy-Item 通配符复制失败
+
+
 ## [0.2.45] - 2026-08-02
 
 - refactor: 移除入口脚本中的 ValidateSet，优化未知命令处理逻辑

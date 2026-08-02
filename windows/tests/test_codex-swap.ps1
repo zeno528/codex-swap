@@ -146,6 +146,7 @@ Write-Host "`n=== Test 10: 更新以 VERSION 为准 ===" -ForegroundColor Cyan
 $moduleText = [System.IO.File]::ReadAllText($modulePath, [System.Text.UTF8Encoding]::new($false))
 Assert-True ($moduleText -match 'Get-SourceVersion' -and $moduleText -notmatch 'sourceVsRelease') '更新决策只比较 VERSION 与本机版本'
 Assert-True ($moduleText -match '下载资产版本 v\$packageVersion 与 VERSION v\$sourceVersion 不一致') '下载资产必须校验 VERSION'
+Assert-True ($moduleText -notmatch "Copy-Item \(Join-Path \$extract '\*'\)") '替换用显式建目录+逐项复制（避免 powershell/powershell#27478）'
 
 Write-Host "`n=== Test 11: Save-ModelAuth 保存/覆盖/删除空态 ===" -ForegroundColor Cyan
 $tmpAuth = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
