@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.42'
+$script:ScriptVersion = '0.2.43'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -141,16 +141,33 @@ function Resolve-ActiveMarkers {
 }
 
 # === 核心：找出当前 config.toml 对应哪个模板（源模型名） ===
+# 与 Linux resolve_active 一致：model+provider 唯一命中直接返回；
+# 多命中时用当前 token 指纹二次消歧，无法唯一确定则返回 $null（不误存 auth）
 # 返回: 模板名（不带 .toml），匹配不到返回 $null
 function Resolve-ActiveName {
     param(
         [Parameter(Mandatory)] [string[]]$Files,
         [Parameter(Mandatory)] [string]$ConfigPath
     )
-    $markers = Resolve-ActiveMarkers -Files $Files -ConfigPath $ConfigPath
+    $current = Get-CurrentFingerprint -ConfigPath $ConfigPath
+    if ([string]::IsNullOrEmpty($current.Model)) { return $null }
+
+    $hits = [System.Collections.Generic.List[hashtable]]::new()
     foreach ($f in $Files) {
-        if ($markers[$f] -eq 'active') {
-            return [System.IO.Path]::GetFileNameWithoutExtension($f)
+        $fp = Get-TemplateFingerprint -Path $f
+        if ($null -ne $fp.Model -and $fp.Model -eq $current.Model -and $fp.Provider -eq $current.Provider) {
+            $hits.Add(@{ Path = $f; Fingerprint = $fp.TokenFingerprint })
+        }
+    }
+
+    if ($hits.Count -eq 1) {
+        return [System.IO.Path]::GetFileNameWithoutExtension($hits[0].Path)
+    }
+    if ($hits.Count -gt 1 -and -not [string]::IsNullOrEmpty($current.TokenFingerprint)) {
+        foreach ($h in $hits) {
+            if ($h.Fingerprint -eq $current.TokenFingerprint) {
+                return [System.IO.Path]::GetFileNameWithoutExtension($h.Path)
+            }
         }
     }
     return $null
@@ -213,6 +230,8 @@ function Save-ModelAuth {
 }
 
 # === 核心：切入时取目标 auth 源 — 状态优先，首次才用模板；无托管 Source 为 $null ===
+# 返回: @{ Source = 'state'|'template'|$null; Path = auth 文件路径|$null }
+# 与 Linux 一致：只返回路径，切换时按字节级复制，原样保留编码/尾随换行
 function Get-SwitchAuth {
     param(
         [Parameter(Mandatory)] [string]$Name,
@@ -221,19 +240,13 @@ function Get-SwitchAuth {
     )
     $statePath = Join-Path $StateDir "$Name.auth.json"
     if ([System.IO.File]::Exists($statePath)) {
-        return @{
-            Source  = 'state'
-            Content = [System.IO.File]::ReadAllText($statePath, [System.Text.UTF8Encoding]::new($false))
-        }
+        return @{ Source = 'state'; Path = $statePath }
     }
     $tplPath = Join-Path $ModelsDir "$Name.auth.json"
     if ([System.IO.File]::Exists($tplPath)) {
-        return @{
-            Source  = 'template'
-            Content = [System.IO.File]::ReadAllText($tplPath, [System.Text.UTF8Encoding]::new($false))
-        }
+        return @{ Source = 'template'; Path = $tplPath }
     }
-    return @{ Source = $null; Content = $null }
+    return @{ Source = $null; Path = $null }
 }
 
 # === 内置模板：🐳 DeepSeek-V4-Flash ===
@@ -611,9 +624,9 @@ function Invoke-Use {
     if ($null -ne $auth.Source) {
         $authTmp = "$($script:AuthPath).tmp"
         try {
-            [System.IO.File]::WriteAllText($authTmp, ($auth.Content.TrimEnd()) + "`n", [System.Text.UTF8Encoding]::new($false))
-            $authVerify = [System.IO.File]::ReadAllText($authTmp, [System.Text.UTF8Encoding]::new($false))
-            if ([string]::IsNullOrWhiteSpace($authVerify)) {
+            # 与 Linux 一致：cp 字节级复制，原样保留编码/尾随换行
+            [System.IO.File]::Copy($auth.Path, $authTmp, $true)
+            if ((Get-Item -LiteralPath $authTmp).Length -eq 0) {
                 throw "原子写校验失败：auth 临时文件为空"
             }
             [System.IO.File]::Move($authTmp, $script:AuthPath, $true)
@@ -633,7 +646,7 @@ function Invoke-Use {
         if ($t -eq '') { continue }
         if ($t -match '(token|key|password|secret)\s*=\s*"(.+)"') {
             $val = $Matches[2]
-            if ($val.Length -gt 14) {
+            if ($val.Length -ge 16) {
                 $masked = $val.Substring(0, 6) + '****' + $val.Substring($val.Length - 6)
                 $t = $t -replace [regex]::Escape($val), $masked
             }
@@ -1183,11 +1196,26 @@ function Invoke-Doctor {
     Write-ColorOutput "通过 $ok / $($ok + $bad)" $(if ($bad -eq 0) { 'Green' } else { 'Yellow' })
 }
 
+# === 卸载：删除本机安装（启动器 + 快捷命令 + 程序目录），数据目录 ~/.codex 不动 ===
+function Invoke-Uninstall {
+    $shimPath = Join-Path $env:USERPROFILE '.local\bin\codex-swap.cmd'
+    $swShimPath = Join-Path $env:USERPROFILE '.local\bin\sw.cmd'
+    $installRoot = Join-Path $env:USERPROFILE '.local\bin\codex-swap'
+    Write-ColorOutput "🗑️  将删除: $shimPath、$swShimPath、$installRoot" Yellow
+    $ans = Read-Host '确认卸载 codex-swap？（数据目录 ~/.codex 不受影响）[y/N]'
+    if ($ans -notmatch '^(y|Y|yes)$') { Write-ColorOutput '已取消' Yellow; return }
+    foreach ($p in @($shimPath, $swShimPath, $installRoot)) {
+        if (Test-Path $p) { Remove-Item $p -Force -Recurse }
+    }
+    Write-ColorOutput '✅ 已卸载 codex-swap' Green
+    Write-ColorOutput 'ℹ️  数据目录 ~/.codex 未动（models/model-states 完好）' DarkGray
+}
+
 # === 主分发 ===
-function Invoke-CodexSwitch {
+function Invoke-CodexSwap {
     param(
         [Parameter(Position = 0)]
-        [ValidateSet('list', 'current', 'use', 'update', 'doctor', 'help', 'menu')]
+        [ValidateSet('list', 'current', 'use', 'update', 'doctor', 'uninstall', 'help', 'menu')]
         [string]$Command = 'menu',
 
         [Parameter(Position = 1)]
@@ -1196,7 +1224,7 @@ function Invoke-CodexSwitch {
     try {
         switch ($Command) {
             'help' {
-                Write-ColorOutput "用法: codex-swap [use <name>] | [list] | [current] | [update] | [doctor] | [help]" White
+                Write-ColorOutput "用法: codex-swap [use <name>] | [list] | [current] | [update] | [doctor] | [uninstall] | [help]" White
                 Write-ColorOutput "      菜单内: o 打开模板目录" DarkGray
                 Write-ColorOutput "      首次运行（模板目录为空）自动进入初始化向导" DarkGray
             }
@@ -1205,6 +1233,7 @@ function Invoke-CodexSwitch {
             'current' { Invoke-Current }
             'update' { Invoke-Update }
             'doctor' { Invoke-Doctor }
+            'uninstall' { Invoke-Uninstall }
             'use' {
                 if ([string]::IsNullOrWhiteSpace($Name)) {
                     throw "use 需要指定模型名（例: codex-swap use deepseek）"
@@ -1219,7 +1248,8 @@ function Invoke-CodexSwitch {
 }
 
 Export-ModuleMember -Function @(
-    'Invoke-CodexSwitch',
+    'Invoke-CodexSwap',
+    'Invoke-Uninstall',
     'Get-TemplateFingerprint',
     'Get-CurrentFingerprint',
     'Resolve-ActiveMarkers',

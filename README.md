@@ -27,7 +27,29 @@ irm https://raw.githubusercontent.com/zeno528/codex-swap/main/windows/install.ps
 bash <(curl -fsSL https://raw.githubusercontent.com/zeno528/codex-swap/main/linux/install.sh)
 ```
 
-> 卸载：Windows `.\windows\install.ps1 -Uninstall` ｜ Linux `bash install.sh --uninstall`。数据目录 `~/.codex` 全程不受影响。
+### 🗑️ 卸载
+
+卸载只删除程序本体与快捷命令，数据目录 `~/.codex`（models/model-states/auth）全程不受影响。
+
+Linux / WSL2：
+
+```bash
+# 安装器自带卸载（无确认，直接删）
+bash <(curl -fsSL https://raw.githubusercontent.com/zeno528/codex-swap/main/linux/install.sh) --uninstall
+
+# 独立卸载器（带 [y/N] 确认）
+bash <(curl -fsSL https://raw.githubusercontent.com/zeno528/codex-swap/main/linux/uninstall.sh)
+```
+
+Windows · PowerShell 7：
+
+```powershell
+# 安装器自带卸载（无确认，直接删）
+Invoke-RestMethod https://raw.githubusercontent.com/zeno528/codex-swap/main/windows/install.ps1 -OutFile "$env:TEMP\codex-swap-install.ps1"; & "$env:TEMP\codex-swap-install.ps1" -Uninstall
+
+# 独立卸载器（带 [y/N] 确认，加 -Yes 跳过）
+Invoke-RestMethod https://raw.githubusercontent.com/zeno528/codex-swap/main/windows/uninstall.ps1 -OutFile "$env:TEMP\codex-swap-uninstall.ps1"; & "$env:TEMP\codex-swap-uninstall.ps1"
+```
 
 ## 🚀 使用
 
@@ -38,6 +60,7 @@ codex-swap list       # 列出模板及激活状态
 codex-swap current    # 查看当前生效配置
 codex-swap update     # 自更新
 codex-swap doctor     # 环境体检
+codex-swap uninstall  # 卸载本机安装（带确认，数据目录不动）
 ```
 
 Windows 与 Linux/WSL2 下均可用快捷命令 `sw`（等同 `codex-swap`）。

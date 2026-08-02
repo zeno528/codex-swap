@@ -4,9 +4,7 @@
 set -euo pipefail
 
 LAUNCHER="$HOME/.local/bin/codex-swap"
-OLD_LAUNCHER="$HOME/.local/bin/codex-switch"
 SHORTCUT="$HOME/.local/bin/sw"
-OLD_SHORTCUT="$HOME/.local/bin/cxs"
 
 shortcut_is_ours() {
     [ -L "$SHORTCUT" ] && [ "$(readlink "$SHORTCUT")" = "codex-swap" ]
@@ -22,17 +20,9 @@ case "$ans" in
     y|Y|yes)
         rm -f "$LAUNCHER"
         printf '\033[32m✅ 已删除 %s\033[0m\n' "$LAUNCHER"
-        if [ -f "$OLD_LAUNCHER" ]; then
-            rm -f "$OLD_LAUNCHER"
-            printf '\033[32m✅ 已删除旧版启动器 %s\033[0m\n' "$OLD_LAUNCHER"
-        fi
         if shortcut_is_ours; then
             rm -f "$SHORTCUT"
             printf '\033[32m✅ 已删除快捷命令 %s\033[0m\n' "$SHORTCUT"
-        fi
-        if [ -L "$OLD_SHORTCUT" ] && { [ "$(readlink "$OLD_SHORTCUT")" = "codex-swap" ] || [ "$(readlink "$OLD_SHORTCUT")" = "codex-switch" ]; }; then
-            rm -f "$OLD_SHORTCUT"
-            printf '\033[32m✅ 已删除旧快捷命令 %s\033[0m\n' "$OLD_SHORTCUT"
         fi
         echo "  数据目录 ~/.codex 未动（models/model-states 完好）"
         ;;

@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.42"
+VERSION="0.2.43"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -405,9 +405,33 @@ cmd_doctor() {
 }
 
 show_help() {
-    echo "用法: codex-swap [use <name>] | [list] | [current] | [update] | [doctor] | [help]"
+    echo "用法: codex-swap [use <name>] | [list] | [current] | [update] | [doctor] | [uninstall] | [help]"
     echo "      菜单内: o 打开模板目录，u 检查并升级"
     echo "      首次运行（模板目录为空）自动进入初始化向导"
+}
+
+# === 卸载：删除本机安装（自身启动器 + sw 快捷命令），数据目录 ~/.codex 不动 ===
+cmd_uninstall() {
+    local self shortcut
+    self="$(readlink -f "$0")"
+    shortcut="$(dirname "$self")/sw"
+    if [ -L "$shortcut" ] && [ "$(readlink "$shortcut")" = "codex-swap" ]; then
+        printf "${YELLOW}  🗑️  将删除: %s、%s${C}\n" "$self" "$shortcut"
+    else
+        printf "${YELLOW}  🗑️  将删除: %s${C}\n" "$self"
+    fi
+    read -r -p "  确认卸载 codex-swap？（数据目录 ~/.codex 不受影响）[y/N] › " ans || { printf "\n"; return 1; }
+    case "$ans" in
+        y|Y|yes)
+            rm -f "$self"
+            if [ -L "$shortcut" ] && [ "$(readlink "$shortcut")" = "codex-swap" ]; then
+                rm -f "$shortcut"
+            fi
+            printf "${GREEN}  ✅ 已卸载 codex-swap${C}\n"
+            echo "  ℹ️  数据目录 ~/.codex 未动（models/model-states 完好）"
+            ;;
+        *) warn "  已取消" ;;
+    esac
 }
 
 # === 内置模板：🐳 DeepSeek-V4-Flash ===
@@ -833,6 +857,7 @@ case "$CMD" in
     use)    cmd_use "$NAME" ;;
     update) cmd_update ;;
     doctor) cmd_doctor ;;
+    uninstall) cmd_uninstall ;;
     help|-h|--help) show_help ;;
     *)      warn "未知命令: $CMD"; show_help ;;
 esac

@@ -48,8 +48,8 @@ windows/src/
 │   │   Resolve-ActiveMarkers / Resolve-ActiveName / Save-ModelState /
 │   │   Get-SwitchContent / Save-ModelAuth / Get-SwitchAuth /
 │   │   Compare-Version / Get-DisplayWidth / Get-CodexHome
-│   └── 命令: Invoke-CodexSwitch（分发）/ Invoke-Menu / Invoke-List /
-│       Invoke-Current / Invoke-Use / Invoke-Update / Invoke-Doctor
+│   └── 命令: Invoke-CodexSwap（分发）/ Invoke-Menu / Invoke-List /
+│       Invoke-Current / Invoke-Use / Invoke-Update / Invoke-Doctor / Invoke-Uninstall
 └── codex-swap.ps1         # 入口：Import-Module + 分发
 windows/bin/codex-swap.cmd # 启动器（调 pwsh -File 入口）
 ```

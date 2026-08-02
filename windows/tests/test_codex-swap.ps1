@@ -112,6 +112,18 @@ try {
 
     [System.IO.File]::WriteAllText($cfg6, 'model = "unknown"' + "`n" + 'model_provider = "xxx"', [System.Text.UTF8Encoding]::new($false))
     Assert-True ($null -eq (Resolve-ActiveName -Files @($dsPath) -ConfigPath $cfg6)) '匹配不到返回 $null'
+
+    # 多模板同 model+provider：用当前 token 指纹消歧（与 Linux resolve_active 一致）
+    $t1 = Join-Path $tmpDir6 'a-model.toml'
+    $t2 = Join-Path $tmpDir6 'b-model.toml'
+    [System.IO.File]::WriteAllText($t1, 'model = "deepseek-v4-flash"' + "`n" + 'model_provider = "deepseek"' + "`n" + 'experimental_bearer_token = "test-token-aaaaaaaaaa1111"', [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($t2, 'model = "deepseek-v4-flash"' + "`n" + 'model_provider = "deepseek"' + "`n" + 'experimental_bearer_token = "test-token-bbbbbbbbbb2222"', [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($cfg6, 'model = "deepseek-v4-flash"' + "`n" + 'model_provider = "deepseek"' + "`n" + 'experimental_bearer_token = "test-token-bbbbbbbbbb2222"', [System.Text.UTF8Encoding]::new($false))
+    Assert-True ((Resolve-ActiveName -Files @($t1, $t2) -ConfigPath $cfg6) -eq 'b-model') '多命中按 token 指纹消歧'
+
+    # 多命中但当前 token 为空：无法唯一确定 → $null（避免 auth 误存到错误模型）
+    [System.IO.File]::WriteAllText($cfg6, 'model = "deepseek-v4-flash"' + "`n" + 'model_provider = "deepseek"', [System.Text.UTF8Encoding]::new($false))
+    Assert-True ($null -eq (Resolve-ActiveName -Files @($t1, $t2) -ConfigPath $cfg6)) '多命中且无指纹时返回 $null'
 } finally { Remove-Item $tmpDir6 -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== Test 7: Compare-Version ===" -ForegroundColor Cyan
@@ -162,13 +174,14 @@ try {
     [System.IO.File]::WriteAllText((Join-Path $states2 'gpt.auth.json'), '{ "token": "test-token-state-auth" }', [System.Text.UTF8Encoding]::new($false))
     $a = Get-SwitchAuth -Name 'gpt' -ModelsDir $models2 -StateDir $states2
     Assert-True ($a.Source -eq 'state') '有状态时用状态'
-    Assert-True ($a.Content.Contains('test-token-state-auth')) '恢复的是状态内容'
+    Assert-True ([System.IO.File]::ReadAllText($a.Path).Contains('test-token-state-auth')) '恢复的是状态内容'
     [System.IO.File]::Delete((Join-Path $states2 'gpt.auth.json'))
     $b = Get-SwitchAuth -Name 'gpt' -ModelsDir $models2 -StateDir $states2
     Assert-True ($b.Source -eq 'template') '无状态用模板'
-    Assert-True ($b.Content.Contains('test-token-tpl-auth')) '恢复的是模板内容'
+    Assert-True ([System.IO.File]::ReadAllText($b.Path).Contains('test-token-tpl-auth')) '恢复的是模板内容'
     $c = Get-SwitchAuth -Name 'nonexist' -ModelsDir $models2 -StateDir $states2
     Assert-True ($null -eq $c.Source) '无托管时 Source 为 $null'
+    Assert-True ($null -eq $c.Path) '无托管时 Path 为 $null'
 } finally { Remove-Item $tmpAuth2 -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== Test 13: 首次向导基础（安装提示/版本检查/🐳 命名） ===" -ForegroundColor Cyan
@@ -209,6 +222,15 @@ try {
     Assert-True ($jc -match 'base_instructions') '含官方系统提示词 base_instructions'
     Assert-True ($jc -match 'comp_hash') '含官方 comp_hash 元数据'
 } finally { Remove-Item $tmpW -Recurse -Force -ErrorAction SilentlyContinue }
+
+Write-Host "`n=== Test 15: uninstall 短命令与 Linux 对齐 ===" -ForegroundColor Cyan
+$moduleText = [System.IO.File]::ReadAllText($modulePath, [System.Text.UTF8Encoding]::new($false))
+Assert-True ($moduleText -match "'uninstall' \{ Invoke-Uninstall \}") 'psm1 分发含 uninstall 命令'
+Assert-True ($moduleText -match "ValidateSet\('list', 'current', 'use', 'update', 'doctor', 'uninstall', 'help', 'menu'\)") 'psm1 ValidateSet 含 uninstall'
+Assert-True ($moduleText -match "'Invoke-Uninstall'") 'Invoke-Uninstall 已导出'
+$entryPath = Join-Path $PSScriptRoot '../src/codex-swap.ps1'
+$entryText = [System.IO.File]::ReadAllText($entryPath, [System.Text.UTF8Encoding]::new($false))
+Assert-True ($entryText -match "ValidateSet\('list', 'current', 'use', 'update', 'doctor', 'uninstall', 'help', 'menu'\)") '入口脚本 ValidateSet 含 uninstall'
 
 Write-Host "`n=== 总结 ===" -ForegroundColor Cyan
 Write-Host "通过: $pass" -ForegroundColor Green

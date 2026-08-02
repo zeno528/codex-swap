@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.43] - 2026-08-02
+
+- refactor: 添加卸载功能，更新相关文档和命令
+
+
 ## [0.2.42] - 2026-08-02
 
 - refactor: rename codex-switch to codex-swap across the project

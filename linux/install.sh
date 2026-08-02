@@ -23,14 +23,8 @@ fail() { printf '\033[31m  %s\033[0m\n' "$1" >&2; exit 1; }
 if [ "${1:-}" = "--uninstall" ]; then
     echo "卸载 codex-swap..."
     rm -f "$LAUNCHER" && say "已删除启动器 $LAUNCHER" || true
-    if [ -f "$BIN_DIR/codex-switch" ]; then
-        rm -f "$BIN_DIR/codex-switch" && say "已删除旧版启动器 $BIN_DIR/codex-switch"
-    fi
     if [ -L "$SHORTCUT" ] && [ "$(readlink "$SHORTCUT")" = "codex-swap" ]; then
         rm -f "$SHORTCUT" && say "已删除快捷命令 $SHORTCUT"
-    fi
-    if [ -L "$BIN_DIR/cxs" ] && { [ "$(readlink "$BIN_DIR/cxs")" = "codex-swap" ] || [ "$(readlink "$BIN_DIR/cxs")" = "codex-switch" ]; }; then
-        rm -f "$BIN_DIR/cxs" && say "已删除旧快捷命令 $BIN_DIR/cxs"
     fi
     echo "  数据目录 ~/.codex 未动（models/model-states 完好）"
     exit 0
@@ -76,10 +70,6 @@ fi
 cp "$NEW" "$LAUNCHER"
 chmod +x "$LAUNCHER"
 say "启动器 $LAUNCHER"
-if [ -f "$BIN_DIR/codex-switch" ]; then
-    rm -f "$BIN_DIR/codex-switch"
-    warn "已移除旧版启动器 $BIN_DIR/codex-switch"
-fi
 
 if [ -e "$SHORTCUT" ] || [ -L "$SHORTCUT" ]; then
     if [ -L "$SHORTCUT" ] && [ "$(readlink "$SHORTCUT")" = "codex-swap" ]; then

@@ -15,7 +15,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('list', 'current', 'use', 'update', 'doctor', 'help', 'menu')]
+    [ValidateSet('list', 'current', 'use', 'update', 'doctor', 'uninstall', 'help', 'menu')]
     [string]$Command = 'menu',
 
     [Parameter(Position = 1)]
@@ -25,4 +25,4 @@ param(
 $ErrorActionPreference = 'Stop'
 $moduleDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Import-Module (Join-Path $moduleDir 'codex-swap.psd1') -Force -ErrorAction Stop
-Invoke-CodexSwitch -Command $Command -Name $Name
+Invoke-CodexSwap -Command $Command -Name $Name
