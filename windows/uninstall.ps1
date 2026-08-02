@@ -18,6 +18,7 @@ $ErrorActionPreference = 'Stop'
 
 $InstallRoot = Join-Path $env:USERPROFILE '.local\bin\codex-switch'
 $ShimPath    = Join-Path $env:USERPROFILE '.local\bin\codex-switch.cmd'
+$SwShimPath  = Join-Path $env:USERPROFILE '.local\bin\sw.cmd'
 
 if (-not (Test-Path $ShimPath) -and -not (Test-Path $InstallRoot)) {
     Write-Host "未发现已安装的 codex-switch" -ForegroundColor Yellow
@@ -32,6 +33,10 @@ if (-not $Yes) {
 if (Test-Path $ShimPath) {
     Remove-Item $ShimPath -Force
     Write-Host "✅ 已删除 $ShimPath" -ForegroundColor Green
+}
+if (Test-Path $SwShimPath) {
+    Remove-Item $SwShimPath -Force
+    Write-Host "✅ 已删除 $SwShimPath" -ForegroundColor Green
 }
 if (Test-Path $InstallRoot) {
     Remove-Item $InstallRoot -Recurse -Force

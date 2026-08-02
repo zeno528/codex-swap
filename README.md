@@ -40,7 +40,7 @@ codex-switch update     # 自更新
 codex-switch doctor     # 环境体检
 ```
 
-Linux/WSL2 下还可用快捷命令 `cxs`（等同 `codex-switch`）。
+Windows 与 Linux/WSL2 下均可用快捷命令 `sw`（等同 `codex-switch`）。
 
 **首次使用**：模板目录 `~/.codex/models/` 为空时自动进入初始化向导 —— 检查 codex CLI（未安装时按系统给出安装命令）、选择导入已有模板或使用内置 🐳 DeepSeek 模板（V4-Flash / V4-Pro）、引导填写 API Key，并自动生成模型目录 `~/.codex/models.json`。
 
@@ -49,7 +49,6 @@ Linux/WSL2 下还可用快捷命令 `cxs`（等同 `codex-switch`）。
 - **模板** `~/.codex/models/<name>.toml`：首次使用模型的种子配置，可随时编辑
 - **状态** `~/.codex/model-states/<name>.toml`：模型最近一次使用时的完整配置，随使用自动演进
 - **切换**：切出时完整保存当前配置；切入时优先恢复目标模型状态，无状态才用模板播种
-- **备份**：每次切换前自动备份到 `~/.codex/backups_model/`（保留 5 份）
 - **登录凭据**：`auth.json` 走同一套机制 — 模板 `models/<name>.auth.json`（可选）、状态 `model-states/<name>.auth.json`。**默认托管**：切出时总是保存当前 auth 快照，切入时恢复目标快照；目标无任何 auth 记录时清空 `auth.json`（防凭据串用），切回原模型时从快照还原
 
 ## 📄 License

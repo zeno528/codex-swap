@@ -35,6 +35,7 @@ $AssetName    = 'codex-switch-windows.zip'
 $InstallRoot  = Join-Path $env:USERPROFILE '.local\bin\codex-switch'
 $BinDir       = Join-Path $env:USERPROFILE '.local\bin'
 $ShimPath     = Join-Path $BinDir 'codex-switch.cmd'
+$SwShimPath   = Join-Path $BinDir 'sw.cmd'
 
 function Write-Step([string]$Text) { Write-Host "  $Text" -ForegroundColor DarkGray }
 function Write-Ok([string]$Text)   { Write-Host "  ✅ $Text" -ForegroundColor Green }
@@ -45,6 +46,7 @@ if ($Uninstall) {
     Write-Host "🗑️  卸载 codex-switch..." -ForegroundColor Cyan
     $removed = 0
     if (Test-Path $ShimPath) { Remove-Item $ShimPath -Force; $removed++; Write-Ok "已删除启动器 $ShimPath" }
+    if (Test-Path $SwShimPath) { Remove-Item $SwShimPath -Force; $removed++; Write-Ok "已删除快捷命令 $SwShimPath" }
     if (Test-Path $InstallRoot) { Remove-Item $InstallRoot -Recurse -Force; $removed++; Write-Ok "已删除程序目录 $InstallRoot" }
     if ($removed -eq 0) { Write-Host "  未发现已安装的 codex-switch" -ForegroundColor Yellow }
     Write-Host "  ℹ️  数据目录 ~/.codex 未动（models/model-states 完好）" -ForegroundColor DarkGray
@@ -128,6 +130,14 @@ try {
     [System.IO.File]::WriteAllText($ShimPath, $shim, [System.Text.UTF8Encoding]::new($false))
     Write-Ok "启动器 $ShimPath"
 
+    $swShim = "@echo off`r`nrem codex-switch launcher (Windows)`r`npwsh -NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\src\codex-switch.ps1`" %*`r`n"
+    if (-not (Test-Path $SwShimPath) -or ([System.IO.File]::ReadAllText($SwShimPath) -match 'codex-switch launcher')) {
+        [System.IO.File]::WriteAllText($SwShimPath, $swShim, [System.Text.UTF8Encoding]::new($false))
+        Write-Ok "快捷命令 $SwShimPath"
+    } else {
+        Write-Host "  ⚠️ 快捷命令未创建：$SwShimPath 已被占用" -ForegroundColor Yellow
+    }
+
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if (-not ($userPath -split ';' | Where-Object { $_.TrimEnd('\') -ieq $BinDir.TrimEnd('\') })) {
         $newPath = ($userPath.TrimEnd(';') + ';' + $BinDir)
@@ -142,6 +152,7 @@ try {
     Write-Host "✅ codex-switch $tag 安装完成" -ForegroundColor Green
     Write-Host "   程序目录: $InstallRoot" -ForegroundColor DarkGray
     Write-Host "   数据目录: $env:USERPROFILE\.codex（未改动）" -ForegroundColor DarkGray
+    Write-Host "   快捷: sw（等同 codex-switch）" -ForegroundColor DarkGray
     Write-Host "   使用: 新终端里运行 codex-switch" -ForegroundColor DarkGray
     Write-Host "   升级: codex-switch update" -ForegroundColor DarkGray
 } finally {
