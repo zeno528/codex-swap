@@ -1,15 +1,15 @@
 #requires -Version 7.0
 <#
 .SYNOPSIS
-    codex-switch Windows 安装器
+    codex-swap Windows 安装器
 
 .DESCRIPTION
-    从 GitHub Release 下载 codex-switch-windows.zip，安装到 ~/.local/bin/codex-switch，
-    并在 ~/.local/bin 生成 codex-switch.cmd 启动器（该目录需在 PATH 中，缺失则自动添加）。
+    从 GitHub Release 下载 codex-swap-windows.zip，安装到 ~/.local/bin/codex-swap，
+    并在 ~/.local/bin 生成 codex-swap.cmd 启动器（该目录需在 PATH 中，缺失则自动添加）。
     数据目录 ~/.codex（models/model-states）不受安装/卸载影响。
 
     一行安装（PowerShell 7）：
-        irm https://raw.githubusercontent.com/zeno528/codex-switch/main/windows/install.ps1 | iex
+        irm https://raw.githubusercontent.com/zeno528/codex-swap/main/windows/install.ps1 | iex
 
     或下载后指定参数运行：
         .\windows\install.ps1 -Version v0.2.0 # 指定版本
@@ -30,11 +30,11 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $RepoOwner    = 'zeno528'
-$RepoName     = 'codex-switch'
-$AssetName    = 'codex-switch-windows.zip'
-$InstallRoot  = Join-Path $env:USERPROFILE '.local\bin\codex-switch'
+$RepoName     = 'codex-swap'
+$AssetName    = 'codex-swap-windows.zip'
+$InstallRoot  = Join-Path $env:USERPROFILE '.local\bin\codex-swap'
 $BinDir       = Join-Path $env:USERPROFILE '.local\bin'
-$ShimPath     = Join-Path $BinDir 'codex-switch.cmd'
+$ShimPath     = Join-Path $BinDir 'codex-swap.cmd'
 $SwShimPath   = Join-Path $BinDir 'sw.cmd'
 
 function Write-Step([string]$Text) { Write-Host "  $Text" -ForegroundColor DarkGray }
@@ -43,17 +43,17 @@ function Write-Bad([string]$Text)  { Write-Host "  ❌ $Text" -ForegroundColor R
 
 # ---------- 卸载 ----------
 if ($Uninstall) {
-    Write-Host "🗑️  卸载 codex-switch..." -ForegroundColor Cyan
+    Write-Host "🗑️  卸载 codex-swap..." -ForegroundColor Cyan
     $removed = 0
     if (Test-Path $ShimPath) { Remove-Item $ShimPath -Force; $removed++; Write-Ok "已删除启动器 $ShimPath" }
     if (Test-Path $SwShimPath) { Remove-Item $SwShimPath -Force; $removed++; Write-Ok "已删除快捷命令 $SwShimPath" }
     if (Test-Path $InstallRoot) { Remove-Item $InstallRoot -Recurse -Force; $removed++; Write-Ok "已删除程序目录 $InstallRoot" }
-    if ($removed -eq 0) { Write-Host "  未发现已安装的 codex-switch" -ForegroundColor Yellow }
+    if ($removed -eq 0) { Write-Host "  未发现已安装的 codex-swap" -ForegroundColor Yellow }
     Write-Host "  ℹ️  数据目录 ~/.codex 未动（models/model-states 完好）" -ForegroundColor DarkGray
     return
 }
 
-Write-Host "💻 codex-switch 安装器" -ForegroundColor Cyan
+Write-Host "💻 codex-swap 安装器" -ForegroundColor Cyan
 Write-Host ("=" * 48) -ForegroundColor DarkGray
 
 # ---------- 前置检查 ----------
@@ -74,7 +74,7 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 Write-Step "获取 GitHub Release（$label）..."
 $release = $null
 try {
-    $release = Invoke-RestMethod -Uri $relUrl -Headers @{ 'User-Agent' = 'codex-switch-installer' } -TimeoutSec 20
+    $release = Invoke-RestMethod -Uri $relUrl -Headers @{ 'User-Agent' = 'codex-swap-installer' } -TimeoutSec 20
 } catch {
     Write-Bad "获取 Release 失败: $_"
     exit 1
@@ -89,12 +89,12 @@ Write-Ok "Release $tag"
 
 # ---------- 确认 ----------
 if (-not $Yes) {
-    $ans = Read-Host "安装 codex-switch $tag 到 $InstallRoot ? [Y/n]"
+    $ans = Read-Host "安装 codex-swap $tag 到 $InstallRoot ? [Y/n]"
     if ($ans -match '^(n|N|no)$') { Write-Host "已取消" -ForegroundColor Yellow; return }
 }
 
 # ---------- 下载 ----------
-$tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-switch-install-" + [guid]::NewGuid().ToString('N'))
+$tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-swap-install-" + [guid]::NewGuid().ToString('N'))
 [System.IO.Directory]::CreateDirectory($tmpDir) | Out-Null
 $zipPath = Join-Path $tmpDir $AssetName
 $extract = Join-Path $tmpDir 'extract'
@@ -104,9 +104,9 @@ try {
     Expand-Archive -Path $zipPath -DestinationPath $extract -Force
 
     # 校验结构
-    if (-not (Test-Path (Join-Path $extract 'src\codex-switch.psm1')) -or
-        -not (Test-Path (Join-Path $extract 'bin\codex-switch.cmd'))) {
-        Write-Bad "下载包结构不完整（缺 src/codex-switch.psm1 或 bin/codex-switch.cmd）"
+    if (-not (Test-Path (Join-Path $extract 'src\codex-swap.psm1')) -or
+        -not (Test-Path (Join-Path $extract 'bin\codex-swap.cmd'))) {
+        Write-Bad "下载包结构不完整（缺 src/codex-swap.psm1 或 bin/codex-swap.cmd）"
         exit 1
     }
     Write-Ok "下载并解压完成"
@@ -122,16 +122,16 @@ try {
     Copy-Item (Join-Path $extract '*') $InstallRoot -Recurse -Force
 
     # 验证模块可加载
-    Import-Module (Join-Path $InstallRoot 'src\codex-switch.psm1') -Force -ErrorAction Stop
+    Import-Module (Join-Path $InstallRoot 'src\codex-swap.psm1') -Force -ErrorAction Stop
     Write-Ok "模块加载验证通过"
 
     # ---------- 启动器 + PATH ----------
-    $shim = "@echo off`r`nrem codex-switch launcher (Windows)`r`npwsh -NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\src\codex-switch.ps1`" %*`r`n"
+    $shim = "@echo off`r`nrem codex-swap launcher (Windows)`r`npwsh -NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\src\codex-swap.ps1`" %*`r`n"
     [System.IO.File]::WriteAllText($ShimPath, $shim, [System.Text.UTF8Encoding]::new($false))
     Write-Ok "启动器 $ShimPath"
 
-    $swShim = "@echo off`r`nrem codex-switch launcher (Windows)`r`npwsh -NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\src\codex-switch.ps1`" %*`r`n"
-    if (-not (Test-Path $SwShimPath) -or ([System.IO.File]::ReadAllText($SwShimPath) -match 'codex-switch launcher')) {
+    $swShim = "@echo off`r`nrem codex-swap launcher (Windows)`r`npwsh -NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\src\codex-swap.ps1`" %*`r`n"
+    if (-not (Test-Path $SwShimPath) -or ([System.IO.File]::ReadAllText($SwShimPath) -match 'codex-swap launcher')) {
         [System.IO.File]::WriteAllText($SwShimPath, $swShim, [System.Text.UTF8Encoding]::new($false))
         Write-Ok "快捷命令 $SwShimPath"
     } else {
@@ -149,12 +149,12 @@ try {
 
     # ---------- 汇总 ----------
     Write-Host ""
-    Write-Host "✅ codex-switch $tag 安装完成" -ForegroundColor Green
+    Write-Host "✅ codex-swap $tag 安装完成" -ForegroundColor Green
     Write-Host "   程序目录: $InstallRoot" -ForegroundColor DarkGray
     Write-Host "   数据目录: $env:USERPROFILE\.codex（未改动）" -ForegroundColor DarkGray
-    Write-Host "   快捷: sw（等同 codex-switch）" -ForegroundColor DarkGray
-    Write-Host "   使用: 新终端里运行 codex-switch" -ForegroundColor DarkGray
-    Write-Host "   升级: codex-switch update" -ForegroundColor DarkGray
+    Write-Host "   快捷: sw（等同 codex-swap）" -ForegroundColor DarkGray
+    Write-Host "   使用: 新终端里运行 codex-swap" -ForegroundColor DarkGray
+    Write-Host "   升级: codex-swap update" -ForegroundColor DarkGray
 } finally {
     if (Test-Path $tmpDir) { Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue }
 }

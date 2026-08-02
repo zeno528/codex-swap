@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Run tests (pwsh, Windows 分支)
         shell: pwsh
-        run: ./windows/tests/test_codex-switch.ps1
+        run: ./windows/tests/test_codex-swap.ps1
 
   test-linux:
     runs-on: ubuntu-latest
@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Bash syntax check and version validation
         run: |
-          bash -n linux/codex-switch
+          bash -n linux/codex-swap
           bash -n linux/install.sh
           bash -n linux/uninstall.sh
           bash -n scripts/verify-release.sh
@@ -43,7 +43,7 @@ jobs:
       - name: Build release zips (注入 VERSION)
         run: scripts/build.sh --package
       - name: Verify release packages
-        run: scripts/verify-release.sh "v$(tr -d '[:space:]' < VERSION)" codex-switch-windows.zip codex-switch-linux.zip
+        run: scripts/verify-release.sh "v$(tr -d '[:space:]' < VERSION)" codex-swap-windows.zip codex-swap-linux.zip
       - name: Generate release notes (commit 列表)
         run: |
           tag="v$(tr -d '[:space:]' < VERSION)"
@@ -62,7 +62,7 @@ jobs:
       - name: Create GitHub Release
         run: |
           tag="v$(tr -d '[:space:]' < VERSION)"
-          gh release create "$tag" codex-switch-windows.zip codex-switch-linux.zip --target "$GITHUB_SHA" --title "$tag" --notes-file NOTES.md
+          gh release create "$tag" codex-swap-windows.zip codex-swap-linux.zip --target "$GITHUB_SHA" --title "$tag" --notes-file NOTES.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Prune old releases (仅保留最新 2 个)

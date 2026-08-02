@@ -1,4 +1,4 @@
-# codex-switch 架构
+# codex-swap 架构
 
 ## 核心矛盾
 
@@ -42,22 +42,22 @@ auth.json ◄──────────────── model-states/<targ
 
 ```
 windows/src/
-├── codex-switch.psd1        # manifest（版本号唯一来源）
-├── codex-switch.psm1        # 全部逻辑
+├── codex-swap.psd1        # manifest（版本号唯一来源）
+├── codex-swap.psm1        # 全部逻辑
 │   ├── 纯函数（可测试）: Get-TemplateFingerprint / Get-CurrentFingerprint /
 │   │   Resolve-ActiveMarkers / Resolve-ActiveName / Save-ModelState /
 │   │   Get-SwitchContent / Save-ModelAuth / Get-SwitchAuth /
 │   │   Compare-Version / Get-DisplayWidth / Get-CodexHome
 │   └── 命令: Invoke-CodexSwitch（分发）/ Invoke-Menu / Invoke-List /
 │       Invoke-Current / Invoke-Use / Invoke-Update / Invoke-Doctor
-└── codex-switch.ps1         # 入口：Import-Module + 分发
-windows/bin/codex-switch.cmd # 启动器（调 pwsh -File 入口）
+└── codex-swap.ps1         # 入口：Import-Module + 分发
+windows/bin/codex-swap.cmd # 启动器（调 pwsh -File 入口）
 ```
 
 ## 分发
 
-- **Windows**：`windows/install.ps1`（irm|iex）→ GitHub API 取 latest release → 下载 `codex-switch-windows.zip` → 解压到 `~/.local/bin/codex-switch/` → 写 `.cmd` shim → 确保 PATH
-- **Linux/WSL2**：`linux/install.sh`（bash <(curl ...)）→ 下载 `codex-switch-linux.zip` → 安装 `~/.local/bin/codex-switch`（单一脚本）→ 确保 PATH。**纯 bash 独立实现，零 pwsh/Windows 依赖**
+- **Windows**：`windows/install.ps1`（irm|iex）→ GitHub API 取 latest release → 下载 `codex-swap-windows.zip` → 解压到 `~/.local/bin/codex-swap/` → 写 `.cmd` shim → 确保 PATH
+- **Linux/WSL2**：`linux/install.sh`（bash <(curl ...)）→ 下载 `codex-swap-linux.zip` → 安装 `~/.local/bin/codex-swap`（单一脚本）→ 确保 PATH。**纯 bash 独立实现，零 pwsh/Windows 依赖**
 - **自更新**：Windows `Invoke-Update` / Linux `cmd_update` 只以根目录 `VERSION` 与本机版本判断是否更新；Release 仅提供下载资产。下载后必须校验资产内部版本等于 `VERSION`，不匹配即拒绝替换。
 - **CI**：ci.yml（Windows+Linux 跑测试 + Linux bash 冒烟）/ release.yml（main 上 VERSION 变更时自动构建双 zip 上传）
 
@@ -65,7 +65,7 @@ windows/bin/codex-switch.cmd # 启动器（调 pwsh -File 入口）
 
 ```
 Windows 分支                 Linux/WSL2 分支（独立实现，零共享代码）
-├── windows/src/*.psm1       ├── linux/codex-switch   （纯 bash 主脚本）
+├── windows/src/*.psm1       ├── linux/codex-swap   （纯 bash 主脚本）
 ├── windows/bin/*.cmd        ├── linux/install.sh
 ├── windows/install.ps1      └── linux/uninstall.sh
 ├── windows/uninstall.ps1
@@ -81,6 +81,6 @@ Windows 分支                 Linux/WSL2 分支（独立实现，零共享代�
 
 ## 数据安全
 
-- 模板/状态/备份都在 `~/.codex/`，与程序目录（`~/.local/bin/codex-switch/`）分离
+- 模板/状态/备份都在 `~/.codex/`，与程序目录（`~/.local/bin/codex-swap/`）分离
 - 卸载只删程序本体，数据永不触碰
 - 密钥永不进仓库：token 只在用户本机模板/状态里

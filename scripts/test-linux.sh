@@ -13,17 +13,17 @@ printf '%s\n' 'model = "gpt-5.6-terra"' 'model_provider = "openai"' '[model_prov
 cp "$CODEX_HOME/models/deepseek.toml" "$CODEX_HOME/config.toml"
 cp "$CODEX_HOME/config.toml" "$test_root/deepseek-before.toml"
 
-output="$(bash linux/codex-switch list)"
+output="$(bash linux/codex-swap list)"
 grep -q deepseek <<< "$output"
 grep -q '编号' <<< "$output"
 grep -q '🐳 deepseek' <<< "$output"
 grep -q '💠 openai' <<< "$output"
-output="$(bash linux/codex-switch current)"
+output="$(bash linux/codex-swap current)"
 grep -q deepseek-v4-flash <<< "$output"
-output="$(bash linux/codex-switch doctor)"
+output="$(bash linux/codex-swap doctor)"
 grep -q '通过 7 / 7' <<< "$output"
 
-output="$(bash linux/codex-switch use gpt)"
+output="$(bash linux/codex-swap use gpt)"
 grep -q '已切换至 gpt' <<< "$output"
 grep -q '当前配置' <<< "$output"
 ! grep -q '⚠️' <<< "$output"
@@ -31,7 +31,7 @@ cmp "$test_root/deepseek-before.toml" "$CODEX_HOME/model-states/deepseek.toml"
 grep -q 'gpt-5.6-terra' "$CODEX_HOME/config.toml"
 
 printf '%s\n' 'trusted_project = "test-project"' >> "$CODEX_HOME/config.toml"
-output="$(bash linux/codex-switch use deepseek)"
+output="$(bash linux/codex-swap use deepseek)"
 grep -q '已切换至 deepseek' <<< "$output"
 grep -q 'trusted_project = "test-project"' "$CODEX_HOME/model-states/gpt.toml"
 cmp "$test_root/deepseek-before.toml" "$CODEX_HOME/config.toml"
@@ -41,31 +41,31 @@ printf '%s\n' '{ "token": "test-token-deepseek-auth" }' > "$CODEX_HOME/models/de
 printf '%s\n' '{ "token": "test-token-gpt-auth" }' > "$CODEX_HOME/models/gpt.auth.json"
 printf '%s\n' '{ "token": "test-token-deepseek-auth" }' > "$CODEX_HOME/auth.json"
 
-output="$(bash linux/codex-switch use gpt)"
+output="$(bash linux/codex-swap use gpt)"
 grep -q '已切换至 gpt' <<< "$output"
 grep -q 'auth.json 已同步（gpt）' <<< "$output"
 grep -q 'test-token-gpt-auth' "$CODEX_HOME/auth.json"
 test ! -f "$CODEX_HOME/model-states/gpt.auth.json"
 
 printf '%s\n' '{ "token": "test-token-gpt-auth-grown" }' > "$CODEX_HOME/auth.json"
-output="$(bash linux/codex-switch use deepseek)"
+output="$(bash linux/codex-swap use deepseek)"
 grep -q '已保存 auth 状态：gpt' <<< "$output"
 grep -q 'test-token-gpt-auth-grown' "$CODEX_HOME/model-states/gpt.auth.json"
 grep -q 'test-token-deepseek-auth' "$CODEX_HOME/auth.json"
 
-output="$(bash linux/codex-switch use gpt)"
+output="$(bash linux/codex-swap use gpt)"
 grep -q 'auth.json 已同步（gpt）' <<< "$output"
 grep -q 'test-token-gpt-auth-grown' "$CODEX_HOME/auth.json"
 
 # 无 auth 记录的模型：切入清空防串用；切回时 auth 从快照恢复
 printf '%s\n' 'model = "claude-4"' 'model_provider = "anthropic"' > "$CODEX_HOME/models/claude.toml"
-output="$(bash linux/codex-switch use claude)"
+output="$(bash linux/codex-swap use claude)"
 grep -q '无 auth 记录，已清空 auth.json' <<< "$output"
 test ! -f "$CODEX_HOME/auth.json"
-output="$(bash linux/codex-switch use gpt)"
+output="$(bash linux/codex-swap use gpt)"
 grep -q 'auth.json 已同步（gpt）' <<< "$output"
 grep -q 'test-token-gpt-auth-grown' "$CODEX_HOME/auth.json"
-output="$(printf '1\nq\nq\n' | bash linux/codex-switch 2>&1)"
+output="$(printf '1\nq\nq\n' | bash linux/codex-swap 2>&1)"
 test "$(grep -o '模型切换' <<< "$output" | wc -l)" -eq 1
 
 fake_bin="$test_root/bin"
@@ -79,11 +79,11 @@ case "$*" in
 esac
 EOF
 chmod +x "$fake_bin/curl"
-sed 's/^VERSION="[^"]*"/VERSION="0.2.2"/' linux/codex-switch > "$test_root/codex-switch"
-if output="$(PATH="$fake_bin:$PATH" bash "$test_root/codex-switch" update 2>&1)"; then
+sed 's/^VERSION="[^"]*"/VERSION="0.2.2"/' linux/codex-swap > "$test_root/codex-swap"
+if output="$(PATH="$fake_bin:$PATH" bash "$test_root/codex-swap" update 2>&1)"; then
     exit 1
 fi
-grep -q '找不到资产 codex-switch-linux.zip' <<< "$output"
+grep -q '找不到资产 codex-swap-linux.zip' <<< "$output"
 
 # === 首次使用向导 ===
 wizard_home="$test_root/wizard"
@@ -91,7 +91,7 @@ mkdir -p "$wizard_home"
 
 # 未装 codex：输出安装命令并询问代执行（若 runner 预装 codex 则跳过安装提示断言）
 if ! command -v codex >/dev/null 2>&1; then
-    output="$(CODEX_HOME="$wizard_home" bash linux/codex-switch menu </dev/null 2>&1)"
+    output="$(CODEX_HOME="$wizard_home" bash linux/codex-swap menu </dev/null 2>&1)"
     grep -q '未检测到 codex CLI' <<< "$output"
     grep -q 'curl -fsSL https://chatgpt.com/codex/install.sh' <<< "$output"
     grep -q '是否现在帮你执行安装命令' <<< "$output"
@@ -103,7 +103,7 @@ cat > "$fake_bin/codex" <<'EOF'
 [ "$1" = "--version" ] && printf '0.144.0\n'
 EOF
 chmod +x "$fake_bin/codex"
-output="$(printf '2\n2\nsk-wizard-test-key\nN\nq\n' | CODEX_HOME="$wizard_home" PATH="$fake_bin:$PATH" bash linux/codex-switch menu 2>&1)"
+output="$(printf '2\n2\nsk-wizard-test-key\nN\nq\n' | CODEX_HOME="$wizard_home" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
 grep -q '模板已创建' <<< "$output"
 grep -q 'deepseek-v4-pro' "$wizard_home/models/deepseek-pro.toml"
 grep -q 'sk-wizard-test-key' "$wizard_home/models/deepseek-pro.toml"

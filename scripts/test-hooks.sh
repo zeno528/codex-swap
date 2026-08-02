@@ -15,13 +15,13 @@ cp -r .githooks "$root/"
 # 初始状态：VERSION 0.2.18 + 一个发布物文件（.githooks 一并跟踪，贴近真实仓库）
 printf '0.2.18\n' > "$root/VERSION"
 mkdir -p "$root/linux"
-printf 'VERSION="0.2.18"\n' > "$root/linux/codex-switch"
+printf 'VERSION="0.2.18"\n' > "$root/linux/codex-swap"
 
 # === 第一轮：发布物提交（-m）→ 递增 + changelog 一次写入，无 amend ===
-git -C "$root" add .githooks VERSION linux/codex-switch
+git -C "$root" add .githooks VERSION linux/codex-swap
 first_out="$(git -C "$root" commit -m "feat: 初始发布物提交" 2>&1)"
 [ "$(tr -d '[:space:]' < "$root/VERSION")" = "0.2.19" ] || { echo "失败: 发布物提交未递增 VERSION"; exit 1; }
-grep -q '^VERSION="0.2.19"' "$root/linux/codex-switch" || { echo "失败: 源码版本未同步"; exit 1; }
+grep -q '^VERSION="0.2.19"' "$root/linux/codex-swap" || { echo "失败: 源码版本未同步"; exit 1; }
 grep -Fq '## [0.2.19] - ' "$root/CHANGELOG.md" || { echo "失败: changelog 缺版本条目"; exit 1; }
 grep -Fq -- '- feat: 初始发布物提交' "$root/CHANGELOG.md" || { echo "失败: changelog 缺提交消息"; exit 1; }
 git -C "$root" show HEAD:CHANGELOG.md | grep -Fq -- '- feat: 初始发布物提交' || { echo "失败: changelog 条目未进入本次提交"; exit 1; }
@@ -38,8 +38,8 @@ git -C "$root" commit -q -m "docs: 文档调整"
 
 # === 第三轮：-F 消息文件场景 → 解析 -F 一次写入，无 amend ===
 printf 'feat: -F 消息文件提交\n' > "$root/msg.txt"
-printf 'VERSION="0.2.19"\nfeat: 改动\n' > "$root/linux/codex-switch"
-git -C "$root" add linux/codex-switch
+printf 'VERSION="0.2.19"\nfeat: 改动\n' > "$root/linux/codex-swap"
+git -C "$root" add linux/codex-swap
 third_out="$(git -C "$root" commit -F msg.txt 2>&1)"
 [ "$(tr -d '[:space:]' < "$root/VERSION")" = "0.2.20" ] || { echo "失败: 第三次提交未递增"; exit 1; }
 grep -Fq '## [0.2.20] - ' "$root/CHANGELOG.md" || { echo "失败: 第三次提交缺 changelog 条目"; exit 1; }

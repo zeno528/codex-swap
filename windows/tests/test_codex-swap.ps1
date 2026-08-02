@@ -1,10 +1,10 @@
 #requires -Version 7.0
-# 单元测试 codex-switch v0.2.0 核心模块
+# 单元测试 codex-swap v0.2.0 核心模块
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
 
-$modulePath = Join-Path $PSScriptRoot '../src/codex-switch.psm1'
+$modulePath = Join-Path $PSScriptRoot '../src/codex-swap.psm1'
 Import-Module $modulePath -Force
 
 $pass = 0
@@ -191,7 +191,7 @@ Write-Host "`n=== Test 14: 内置模板写入（DeepSeek + 官方 models.json）
 $tmpW = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmpW | Out-Null
 try {
-    $tplDs = & (Get-Module codex-switch) { $script:TemplateDeepseek }
+    $tplDs = & (Get-Module codex-swap) { $script:TemplateDeepseek }
     Assert-True (-not [string]::IsNullOrWhiteSpace($tplDs)) '内置 Flash 模板非空'
     $p = Write-TemplateFile -Name 'deepseek' -Content $tplDs -ApiKey 'sk-test-key-123456789' -ModelsDir $tmpW
     Assert-True ([System.IO.File]::Exists($p)) '模板文件已生成'

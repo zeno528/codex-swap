@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.42] - 2026-08-02
+
+- refactor: rename codex-switch to codex-swap across the project
+
+
 ## [0.2.41] - 2026-08-02
 
 - Add unit tests for codex-switch module functionality

@@ -1,13 +1,13 @@
 <div align="center">
 
-# ⚡ codex-switch
+# ⚡ codex-swap
 
 **切换 Codex 模型配置的命令行工具**
 
 模板播种 + 状态恢复：每个模型独立维护自己最新的完整配置，来回切换不丢使用记录、互不污染。
 
-[![版本](https://img.shields.io/github/v/tag/zeno528/codex-switch?label=版本&color=blue)](https://github.com/zeno528/codex-switch/releases)
-[![License](https://img.shields.io/github/license/zeno528/codex-switch?label=License)](LICENSE)
+[![版本](https://img.shields.io/github/v/tag/zeno528/codex-swap?label=版本&color=blue)](https://github.com/zeno528/codex-swap/releases)
+[![License](https://img.shields.io/github/license/zeno528/codex-swap?label=License)](LICENSE)
 
 </div>
 
@@ -18,13 +18,13 @@
 ### 🪟 Windows · PowerShell 7
 
 ```powershell
-irm https://raw.githubusercontent.com/zeno528/codex-switch/main/windows/install.ps1 | iex
+irm https://raw.githubusercontent.com/zeno528/codex-swap/main/windows/install.ps1 | iex
 ```
 
 ### 🐧 Linux / WSL2
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/zeno528/codex-switch/main/linux/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/zeno528/codex-swap/main/linux/install.sh)
 ```
 
 > 卸载：Windows `.\windows\install.ps1 -Uninstall` ｜ Linux `bash install.sh --uninstall`。数据目录 `~/.codex` 全程不受影响。
@@ -32,15 +32,15 @@ bash <(curl -fsSL https://raw.githubusercontent.com/zeno528/codex-switch/main/li
 ## 🚀 使用
 
 ```bash
-codex-switch            # 交互式菜单：选数字切换模型
-codex-switch use gpt    # 切换模型（恢复该模型最新状态 / 首次模板播种）
-codex-switch list       # 列出模板及激活状态
-codex-switch current    # 查看当前生效配置
-codex-switch update     # 自更新
-codex-switch doctor     # 环境体检
+codex-swap            # 交互式菜单：选数字切换模型
+codex-swap use gpt    # 切换模型（恢复该模型最新状态 / 首次模板播种）
+codex-swap list       # 列出模板及激活状态
+codex-swap current    # 查看当前生效配置
+codex-swap update     # 自更新
+codex-swap doctor     # 环境体检
 ```
 
-Windows 与 Linux/WSL2 下均可用快捷命令 `sw`（等同 `codex-switch`）。
+Windows 与 Linux/WSL2 下均可用快捷命令 `sw`（等同 `codex-swap`）。
 
 **首次使用**：模板目录 `~/.codex/models/` 为空时自动进入初始化向导 —— 检查 codex CLI（未安装时按系统给出安装命令）、选择导入已有模板或使用内置 🐳 DeepSeek 模板（V4-Flash / V4-Pro）、引导填写 API Key，并自动生成模型目录 `~/.codex/models.json`。
 

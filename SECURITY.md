@@ -8,13 +8,13 @@
 
 ## 供应链说明（Supply Chain）
 
-- 安装命令从 `raw.githubusercontent.com/zeno528/codex-switch/main/windows/install.ps1`（或 `linux/install.sh`）拉取安装器
+- 安装命令从 `raw.githubusercontent.com/zeno528/codex-swap/main/windows/install.ps1`（或 `linux/install.sh`）拉取安装器
 - 安装器通过 GitHub API 从 **Release 资产**（非 main 分支文件）下载运行时，tag 由 CI 构建，减少主分支被篡改的影响面
 - 生产环境使用建议：固定版本安装（`windows/install.ps1 -Version vX.Y.Z` / `linux/install.sh vX.Y.Z`）
 
 ## 报告漏洞（Reporting a Vulnerability）
 
-请通过 GitHub 私有漏洞报告（Private Vulnerability Reporting）或 [Issues](https://github.com/zeno528/codex-switch/issues) 提交，**不要**在公开 issue 中粘贴任何密钥或 config 片段。
+请通过 GitHub 私有漏洞报告（Private Vulnerability Reporting）或 [Issues](https://github.com/zeno528/codex-swap/issues) 提交，**不要**在公开 issue 中粘贴任何密钥或 config 片段。
 
 报告内容建议包含：影响面、复现步骤、期望行为。
 

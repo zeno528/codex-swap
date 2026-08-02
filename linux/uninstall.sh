@@ -1,31 +1,36 @@
 #!/usr/bin/env bash
-# codex-switch 卸载器 (Linux/WSL2 独立分支)
-# 仅删除 ~/.local/bin/codex-switch 及其 sw 快捷命令，数据目录 ~/.codex 不受影响
+# codex-swap 卸载器 (Linux/WSL2 独立分支)
+# 仅删除 ~/.local/bin/codex-swap 及其 sw 快捷命令，数据目录 ~/.codex 不受影响
 set -euo pipefail
 
-LAUNCHER="$HOME/.local/bin/codex-switch"
+LAUNCHER="$HOME/.local/bin/codex-swap"
+OLD_LAUNCHER="$HOME/.local/bin/codex-switch"
 SHORTCUT="$HOME/.local/bin/sw"
 OLD_SHORTCUT="$HOME/.local/bin/cxs"
 
 shortcut_is_ours() {
-    [ -L "$SHORTCUT" ] && [ "$(readlink "$SHORTCUT")" = "codex-switch" ]
+    [ -L "$SHORTCUT" ] && [ "$(readlink "$SHORTCUT")" = "codex-swap" ]
 }
 
 if [ ! -f "$LAUNCHER" ] && ! shortcut_is_ours; then
-    echo "未发现已安装的 codex-switch"
+    echo "未发现已安装的 codex-swap"
     exit 0
 fi
 
-read -r -p "确认卸载 codex-switch？（数据目录 ~/.codex 不受影响）[y/N] " ans
+read -r -p "确认卸载 codex-swap？（数据目录 ~/.codex 不受影响）[y/N] " ans
 case "$ans" in
     y|Y|yes)
         rm -f "$LAUNCHER"
         printf '\033[32m✅ 已删除 %s\033[0m\n' "$LAUNCHER"
+        if [ -f "$OLD_LAUNCHER" ]; then
+            rm -f "$OLD_LAUNCHER"
+            printf '\033[32m✅ 已删除旧版启动器 %s\033[0m\n' "$OLD_LAUNCHER"
+        fi
         if shortcut_is_ours; then
             rm -f "$SHORTCUT"
             printf '\033[32m✅ 已删除快捷命令 %s\033[0m\n' "$SHORTCUT"
         fi
-        if [ -L "$OLD_SHORTCUT" ] && [ "$(readlink "$OLD_SHORTCUT")" = "codex-switch" ]; then
+        if [ -L "$OLD_SHORTCUT" ] && { [ "$(readlink "$OLD_SHORTCUT")" = "codex-swap" ] || [ "$(readlink "$OLD_SHORTCUT")" = "codex-switch" ]; }; then
             rm -f "$OLD_SHORTCUT"
             printf '\033[32m✅ 已删除旧快捷命令 %s\033[0m\n' "$OLD_SHORTCUT"
         fi

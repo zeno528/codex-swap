@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pre-commit: 仅在改动发布物相关文件时自动递增 VERSION（唯一版本源，patch，99 进位）
-# 递增后同步三处源码版本号（linux/codex-switch、windows psm1/psd1），保持与 VERSION 一致
+# 递增后同步三处源码版本号（linux/codex-swap、windows psm1/psd1），保持与 VERSION 一致
 # 文档/CI/元数据改动不递增，避免版本信号失真（README 提交不给用户制造"假更新"）
 set -euo pipefail
 
@@ -44,17 +44,17 @@ new="$(bump "$cur")"
 printf '%s\n' "$new" > "$VF"
 git add "$VF"
 # 同步三处源码版本（源码为固化版本号，不再是 @VERSION@ 占位符；文件缺失时跳过）
-if [ -f "$ROOT/linux/codex-switch" ]; then
-    sed -i "s/^VERSION=\"[^\"]*\"/VERSION=\"$new\"/" "$ROOT/linux/codex-switch"
-    git add "$ROOT/linux/codex-switch"
+if [ -f "$ROOT/linux/codex-swap" ]; then
+    sed -i "s/^VERSION=\"[^\"]*\"/VERSION=\"$new\"/" "$ROOT/linux/codex-swap"
+    git add "$ROOT/linux/codex-swap"
 fi
-if [ -f "$ROOT/windows/src/codex-switch.psm1" ]; then
-    sed -i "s/^\(\$script:ScriptVersion[[:space:]]*=[[:space:]]*'\)[^']*'/\1$new'/" "$ROOT/windows/src/codex-switch.psm1"
-    git add "$ROOT/windows/src/codex-switch.psm1"
+if [ -f "$ROOT/windows/src/codex-swap.psm1" ]; then
+    sed -i "s/^\(\$script:ScriptVersion[[:space:]]*=[[:space:]]*'\)[^']*'/\1$new'/" "$ROOT/windows/src/codex-swap.psm1"
+    git add "$ROOT/windows/src/codex-swap.psm1"
 fi
-if [ -f "$ROOT/windows/src/codex-switch.psd1" ]; then
-    sed -i "s/^\([[:space:]]*ModuleVersion[[:space:]]*=[[:space:]]*'\)[^']*'/\1$new'/" "$ROOT/windows/src/codex-switch.psd1"
-    git add "$ROOT/windows/src/codex-switch.psd1"
+if [ -f "$ROOT/windows/src/codex-swap.psd1" ]; then
+    sed -i "s/^\([[:space:]]*ModuleVersion[[:space:]]*=[[:space:]]*'\)[^']*'/\1$new'/" "$ROOT/windows/src/codex-swap.psd1"
+    git add "$ROOT/windows/src/codex-swap.psd1"
 fi
 echo "pre-commit: 版本号 $cur → $new（VERSION 与三处源码已同步）"
 # 提交消息可从命令行获取时（-m/-F/--amend）直接写 changelog 并随本次提交入库；

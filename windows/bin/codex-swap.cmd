@@ -1,3 +1,3 @@
 @echo off
-rem codex-switch launcher (Windows)
-pwsh -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\src\codex-switch.ps1" %*
+rem codex-swap launcher (Windows)
+pwsh -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\src\codex-swap.ps1" %*
