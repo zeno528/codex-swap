@@ -146,7 +146,7 @@ try {
     Write-Host ""
     Write-Host "✅ codex-swap $tag 安装完成" -ForegroundColor Green
     Write-Host "   程序目录: $InstallRoot" -ForegroundColor DarkGray
-    Write-Host "   数据目录: $env:USERPROFILE\.codex（未改动）" -ForegroundColor DarkGray
+    Write-Host "   数据目录: $env:USERPROFILE\.codex" -ForegroundColor DarkGray
     Write-Host "   快捷: sw（等同 codex-swap）" -ForegroundColor DarkGray
     Write-Host "   使用: 新终端里运行 codex-swap" -ForegroundColor DarkGray
     Write-Host "   升级: codex-swap update" -ForegroundColor DarkGray

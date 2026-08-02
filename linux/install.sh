@@ -93,6 +93,6 @@ esac
 printf '\n\033[32m✅ codex-swap %s 安装完成\033[0m\n' "$TAG"
 echo "   程序: $LAUNCHER"
 echo "   快捷: sw"
-echo "   数据目录: $HOME/.codex（未改动）"
+echo "   数据目录: $HOME/.codex"
 echo "   使用: 新终端里运行 sw（或 codex-swap）"
 echo "   升级: codex-swap update"
