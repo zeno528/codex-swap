@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.63] - 2026-08-02
+
+- ✨ feat(wizard): DeepSeek 内置模板改为默认官方配置
+
+
 ## [0.2.62] - 2026-08-02
 
 - ✨ feat(wizard): 菜单内新增新建配置入口并支持 DeepSeek 模板多选

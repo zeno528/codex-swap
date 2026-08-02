@@ -56,7 +56,7 @@ Windows、Linux/WSL2 与 macOS 下均可用快捷命令 `sw`（等同 `codex-swa
 
 **首次使用**：模板目录 `~/.codex/models/` 为空时自动进入初始化向导 —— 检查 codex CLI（未安装时按系统给出安装命令）、选择导入已有模板或使用内置 🐳 DeepSeek 模板（V4-Flash / V4-Pro）、引导填写 API Key，并自动生成模型目录 `~/.codex/models.json`。
 
-**随时新建配置**：菜单内按 `N` 可再次进入同一配置向导 —— 内置 DeepSeek 模板支持空格多选（V4-Flash / V4-Pro 可一次全建，初始全选、回车确认），也可打开目录导入自己的模板；已有模板与状态不受影响。
+**随时新建配置**：菜单内按 `N` 可再次进入同一配置向导 —— DeepSeek 官方配置默认创建 V4-Flash 模板，同时写入官方模型目录 `models.json`（含 V4-Flash / V4-Pro，可在 Codex 内用 `/model` 或 `--model` 切换）；也可打开目录导入自己的模板。已有模板与状态不受影响。
 
 ## 📖 工作原理
 

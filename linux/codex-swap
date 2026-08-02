@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.62"
+VERSION="0.2.63"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -512,30 +512,6 @@ experimental_bearer_token = "__API_KEY__"
 TEMPLATE_EOF
 )
 
-# === 内置模板：🐳 DeepSeek-V4-Pro ===
-TEMPLATE_DEEPSEEK_PRO=$(cat <<'TEMPLATE_EOF'
-# ============================================================
-# 🐳 DeepSeek-V4-Pro 模板
-# 官方接入文档: https://api-docs.deepseek.com/zh-cn/quick_start/agent_integrations/codex
-# API Key 申请: https://platform.deepseek.com/api_keys
-# base_url: https://api.deepseek.com（OpenAI 兼容，国内直连）
-# 注意: 旧模型名 deepseek-chat/deepseek-reasoner 已于 2026-07-24 弃用
-# ============================================================
-model = "deepseek-v4-pro"
-model_provider = "deepseek"
-preferred_auth_method = "apikey"
-forced_login_method = "api"
-model_reasoning_effort = "high"
-model_catalog_json = "__MODELS_JSON__"
-
-[model_providers.deepseek]
-name = "deepseek"
-base_url = "https://api.deepseek.com"
-wire_api = "responses"
-experimental_bearer_token = "__API_KEY__"
-TEMPLATE_EOF
-)
-
 # === 内置模型目录 models.json（Codex 识别 V4 模型能力必需） ===
 # DeepSeek 官方完整版（V4-Flash/V4-Pro，含 instructions_template/base_instructions）
 # 来源: https://api-docs.deepseek.com/zh-cn/quick_start/agent_integrations/codex
@@ -681,6 +657,11 @@ TEMPLATE_MODELS_JSON=$(cat <<'JSON_EOF'
 JSON_EOF
 )
 
+# === 工具：向导步骤分割线（每次交互阶段之间分隔，避免连排输出） ===
+wizard_divider() {
+    printf "  ${DGRAY}╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌${C}\n"
+}
+
 # === 向导：检测 Codex 安装（数据目录存在即视为已安装） ===
 wizard_check_codex() {
     [ -d "$CODEX_HOME" ] && return 0
@@ -742,6 +723,7 @@ wizard_check_version() {
 
 # === 向导：打开目录引导导入用户自己的模板 ===
 wizard_import_template() {
+    wizard_divider
     mkdir -p "$MODELS_DIR"
     if command -v open >/dev/null 2>&1 || command -v xdg-open >/dev/null 2>&1; then
         open_dir "$MODELS_DIR"
@@ -783,83 +765,35 @@ wizard_write_models_json() {
     printf "  ${GREEN}✅ 模型目录已写入：${C}%s\n" "$MODELS_JSON"
 }
 
-# === 向导：内置 🐳 DeepSeek 模板多选（空格/数字/方向键）+ API Key 引导 ===
+# === 向导：内置 🐳 DeepSeek 官方配置（默认 V4-Flash 模板 + 官方 models.json） ===
+# models.json 一次写入即含 V4-Flash/V4-Pro 两个模型（官方推荐目录），
+# 因此播种无需选模型：默认 Flash 作为 config 种子，之后可在 Codex 内用
+# /model 或 --model 切换模型。
 wizard_builtin_template() {
-    local -a ds_names=("deepseek" "deepseek-pro")
-    local -a ds_contents=("$TEMPLATE_DEEPSEEK" "$TEMPLATE_DEEPSEEK_PRO")
-    local -a ds_labels=(
-        "DeepSeek-V4-Flash — 默认模型，快速，适合日常编码"
-        "DeepSeek-V4-Pro — 深度推理，适合复杂任务"
-    )
-    local -a checked=(1 1)
-    local cursor=0 total="${#ds_names[@]}" i ch rest key ans
-    local rows=$((total + 2)) first_name=""
-    local -a picked_names=() picked_contents=()
-
-    draw_multi() {
-        local i mark ind
-        for ((i = 0; i < total; i++)); do
-            mark=" "; ind=" "
-            [ "${checked[$i]}" = 1 ] && mark="•"
-            [ "$i" -eq "$cursor" ] && ind="›"
-            printf "  ${GREEN}%s${C} [%s] %d) %s\n" "$ind" "$mark" "$((i + 1))" "${ds_labels[$i]}"
-        done
-        printf "  ${DGRAY}空格 选中/取消 · ↑/↓ 移动 · 回车 确认 · q 取消${C}\n"
-        printf "\n"
-    }
-
+    local name="deepseek" key ans
+    wizard_divider
     printf "  ${CYAN}🐳 DeepSeek 官方接入配置${C}\n"
-    printf "  ${DGRAY}请选择要创建的模型（初始全选）：${C}\n"
-    draw_multi
-    while true; do
-        IFS= read -r -s -n1 ch || { printf "\n"; return 1; }
-        case "$ch" in
-            $'\x1b')
-                IFS= read -r -s -n2 rest || { printf "\n"; return 1; }
-                case "$rest" in
-                    '[A') cursor=$(( (cursor + total - 1) % total )) ;;
-                    '[B') cursor=$(( (cursor + 1) % total )) ;;
-                esac
-                ;;
-            ' ') checked[cursor]=$((1 - checked[cursor])); cursor=$(( (cursor + 1) % total )) ;;
-            $'\n'|$'\r'|'') printf "\n"; break ;;
-            q|Q) printf "\n"; return 1 ;;
-        esac
-        printf "\033[%dA" "$rows"
-        draw_multi
-    done
+    printf "  ${DGRAY}默认 V4-Flash 模板；models.json 已含 V4-Flash/V4-Pro${C}\n"
+    printf "  ${DGRAY}Codex 内 /model 或 --model 切换${C}\n"
 
-    for ((i = 0; i < total; i++)); do
-        if [ "${checked[$i]}" = 1 ]; then
-            picked_names+=("${ds_names[$i]}")
-            picked_contents+=("${ds_contents[$i]}")
-        fi
-    done
-    [ "${#picked_names[@]}" -eq 0 ] && { printf "${YELLOW}  未选择任何模型，已取消${C}\n"; return 1; }
-
+    wizard_divider
     printf "  ${CYAN}🔑 DeepSeek API Key${C}\n"
-    printf "  ${DGRAY}在 platform.deepseek.com/api_keys 创建，可留空稍后手动填入模板${C}\n"
+    printf "  ${DGRAY}在 ${CYAN}https://platform.deepseek.com/api_keys${C}${DGRAY} 创建，可留空稍后手动填入模板${C}\n"
     read_secret "  API Key › "
     key="$SECRET_INPUT"
 
     mkdir -p "$MODELS_DIR"
-    for ((i = 0; i < ${#picked_names[@]}; i++)); do
-        wizard_write_template "${picked_names[$i]}" "${picked_contents[$i]}" "$key"
-        [ -z "$first_name" ] && first_name="${picked_names[$i]}"
-    done
+    wizard_write_template "$name" "$TEMPLATE_DEEPSEEK" "$key"
     wizard_write_models_json
 
+    wizard_divider
     if [ ! -f "$CONFIG" ]; then
-        printf "  ${DGRAY}未发现 config.toml，已直接初始化为 ${first_name}${C}\n"
-        cp "$MODELS_DIR/$first_name.toml" "$CONFIG"
+        printf "  ${DGRAY}未发现 config.toml，已直接初始化为 ${name}${C}\n"
+        cp "$MODELS_DIR/$name.toml" "$CONFIG"
     else
-        if [ "${#picked_names[@]}" -eq 1 ]; then
-            read -r -p "  是否立即切换到该模板（${first_name}）？[y/N] › " ans || true
-        else
-            read -r -p "  是否立即切换到默认模型（${first_name}）？[y/N] › " ans || true
-        fi
+        read -r -p "  是否立即切换到 DeepSeek-V4-Flash？[y/N] › " ans || true
         if [ "$ans" = y ] || [ "$ans" = Y ]; then
-            cmd_use "$first_name" || true
+            cmd_use "$name" || true
         fi
     fi
     return 0
@@ -891,6 +825,7 @@ cmd_first_run() {
     wizard_check_codex || return 1
     wizard_check_version || return 1
 
+    wizard_divider
     if wizard_choose_source; then
         printf "\n  ${DGRAY}✨ 初始化完成${C}\n"
     else
@@ -904,6 +839,7 @@ cmd_first_run() {
 cmd_new_config() {
     printf "${BOLD_CYAN}  🆕 新建模型配置${C}\n"
     printf "${DGRAY}  创建新的模型模板，已有配置与状态不受影响${C}\n\n"
+    wizard_divider
     wizard_choose_source || { printf "${DGRAY}  已取消${C}\n"; return 1; }
     printf "  ${GREEN}✅ 新建配置完成${C}\n"
     return 0

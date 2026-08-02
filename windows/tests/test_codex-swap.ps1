@@ -289,29 +289,26 @@ foreach ($scriptFile in $scriptFiles) {
 }
 Assert-True (-not (Test-Utf8Bom (Join-Path $PSScriptRoot '../install.ps1'))) 'ASCII 引导器不使用 BOM，支持 irm|iex'
 
-Write-Host "`n=== Test 18: 新建配置入口 + New-DeepseekTemplates 多选批量创建 ===" -ForegroundColor Cyan
+Write-Host "`n=== Test 18: 新建配置入口 + 默认 DeepSeek-V4-Flash 配置 ===" -ForegroundColor Cyan
 Assert-True ($moduleText -match 'function Invoke-NewConfig') 'psm1 含 Invoke-NewConfig 新建配置向导'
 Assert-True ($moduleText -match "choice -eq 'n'") '菜单含 n 新建配置入口'
-Assert-True ($moduleText -match 'New-DeepseekTemplates') 'psm1 含 New-DeepseekTemplates'
-Assert-True ($manifestText -match 'New-DeepseekTemplates') 'manifest 导出 New-DeepseekTemplates'
+Assert-True ($moduleText -match 'Write-WizardDivider') 'psm1 含向导步骤分割线函数'
+Assert-True ($moduleText -notmatch '\]8;;') 'API Key 链接为纯文本（与仓库链接一致，由终端自动识别）'
+Assert-True ($moduleText -match 'https://platform\.deepseek\.com/api_keys') 'API Key 链接带 https:// 协议头'
+Assert-True ($moduleText -match '是否立即切换到 DeepSeek-V4-Flash') '向导默认切换目标为 Flash'
+Assert-True ($moduleText -notmatch 'New-DeepseekTemplates') '不再保留多选批量创建函数'
+Assert-True ($moduleText -notmatch 'TemplateDeepseekPro') '不再内置 Pro 模板（两个模型由官方 models.json 目录提供）'
+Assert-True ($manifestText -notmatch 'New-DeepseekTemplates') 'manifest 不再导出多选批量创建函数'
 $tmpN = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmpN | Out-Null
 try {
     $tplDs = & (Get-Module codex-swap) { $script:TemplateDeepseek }
-    $tplDsPro = & (Get-Module codex-swap) { $script:TemplateDeepseekPro }
-    $p1 = New-DeepseekTemplates -Names @('deepseek', 'deepseek-pro') -Contents @($tplDs, $tplDsPro) -ApiKey 'sk-test-multi-key-123456789' -ModelsDir $tmpN -ModelsJsonPath (Join-Path $tmpN 'models.json')
-    Assert-True ($p1.Count -eq 2) '多选两个模型返回两个路径'
-    Assert-True ([System.IO.File]::Exists((Join-Path $tmpN 'deepseek.toml'))) 'Flash 模板已创建'
-    Assert-True ([System.IO.File]::Exists((Join-Path $tmpN 'deepseek-pro.toml'))) 'Pro 模板已创建'
-    $flashC = [System.IO.File]::ReadAllText((Join-Path $tmpN 'deepseek.toml'), [System.Text.UTF8Encoding]::new($false))
-    $proC = [System.IO.File]::ReadAllText((Join-Path $tmpN 'deepseek-pro.toml'), [System.Text.UTF8Encoding]::new($false))
-    Assert-True ($flashC -match 'sk-test-multi-key-123456789') 'Flash 模板写入 API Key'
-    Assert-True ($proC -match 'sk-test-multi-key-123456789') 'Pro 模板写入同一 API Key'
-    Assert-True ([System.IO.File]::Exists((Join-Path $tmpN 'models.json'))) 'models.json 已写入'
-    $p2 = New-DeepseekTemplates -Names @('deepseek-pro') -Contents @($tplDsPro) -ApiKey 'sk-test-single-key-123456789' -ModelsDir $tmpN -ModelsJsonPath (Join-Path $tmpN 'models2.json')
-    Assert-True ($p2.Count -eq 1) '单选只返回一个路径'
-    Assert-True (-not [System.IO.File]::Exists((Join-Path $tmpN 'deepseek2.toml'))) '未选中的模型不创建'
-    Assert-True ([System.IO.File]::Exists((Join-Path $tmpN 'models2.json'))) '单选同样写入 models.json'
+    $p = Write-TemplateFile -Name 'deepseek' -Content $tplDs -ApiKey 'sk-test-default-key-123456789' -ModelsDir $tmpN
+    Assert-True ([System.IO.File]::Exists($p)) '默认模板已创建'
+    $c = [System.IO.File]::ReadAllText($p, [System.Text.UTF8Encoding]::new($false))
+    Assert-True ($c -match 'model = "deepseek-v4-flash"') '默认模板为 V4-Flash'
+    Assert-True ($c -match 'sk-test-default-key-123456789') '默认模板写入 API Key'
+    Assert-True ($c -match 'model_catalog_json') '默认模板引用官方 models.json'
 } finally { Remove-Item $tmpN -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== 总结 ===" -ForegroundColor Cyan
