@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.61'
+$script:ScriptVersion = '0.2.62'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -797,6 +797,24 @@ function Write-ModelsJsonFile {
     return $Path
 }
 
+# === 向导：按多选结果批量创建 DeepSeek 模板 + 写 models.json（可测纯函数） ===
+function New-DeepseekTemplates {
+    param(
+        [Parameter(Mandatory)] [string[]]$Names,
+        [Parameter(Mandatory)] [string[]]$Contents,
+        [Parameter(Mandatory)] [AllowEmptyString()] [string]$ApiKey,
+        [Parameter(Mandatory)] [string]$ModelsDir,
+        [Parameter(Mandatory)] [string]$ModelsJsonPath
+    )
+    if ($Names.Count -ne $Contents.Count) { throw 'Names 与 Contents 数量必须一致' }
+    $paths = [System.Collections.Generic.List[string]]::new()
+    for ($i = 0; $i -lt $Names.Count; $i++) {
+        $paths.Add((Write-TemplateFile -Name $Names[$i] -Content $Contents[$i] -ApiKey $ApiKey -ModelsDir $ModelsDir))
+    }
+    Write-ModelsJsonFile -Path $ModelsJsonPath | Out-Null
+    return @($paths)
+}
+
 # === 向导：打开目录引导导入用户自己的模板 ===
 function Invoke-ImportTemplate {
     if (-not [System.IO.Directory]::Exists($script:ModelsDir)) {
@@ -829,41 +847,134 @@ function Invoke-ImportTemplate {
     return $true
 }
 
-# === 向导：内置 🐳 DeepSeek 模板选择 + API Key 引导 ===
+# === 向导：内置 🐳 DeepSeek 模板多选（空格/数字/方向键）+ API Key 引导 ===
 function Invoke-BuiltinTemplate {
-    Write-ColorOutput "  " White -NoNewline
-    Write-ColorOutput "1)" Green -NoNewline
-    Write-ColorOutput " 🐳 DeepSeek-V4-Flash — 默认模型，快速，适合日常编码" White
-    Write-ColorOutput "  " White -NoNewline
-    Write-ColorOutput "2)" Green -NoNewline
-    Write-ColorOutput " 🐳 DeepSeek-V4-Pro — 深度推理，适合复杂任务" White
-    $choice = Read-Host '  选择 [1-2] › '
-    $name = 'deepseek'
-    $content = $script:TemplateDeepseek
-    switch ($choice) {
-        '1' { $name = 'deepseek'     ; $content = $script:TemplateDeepseek }
-        '2' { $name = 'deepseek-pro' ; $content = $script:TemplateDeepseekPro }
-        default { Write-ColorOutput "  无效选择，默认使用 DeepSeek-V4-Flash" Yellow }
+    $options = @(
+        @{ Name = 'deepseek'; Content = $script:TemplateDeepseek; Label = 'DeepSeek-V4-Flash — 默认模型，快速，适合日常编码' },
+        @{ Name = 'deepseek-pro'; Content = $script:TemplateDeepseekPro; Label = 'DeepSeek-V4-Pro — 深度推理，适合复杂任务' }
+    )
+    $total = $options.Count
+    $checked = New-Object 'bool[]' $total
+    for ($i = 0; $i -lt $total; $i++) { $checked[$i] = $true }
+    $cursor = 0
+    $rowCount = $total + 2
+    $esc = [char]27
+
+    Write-ColorOutput "  🐳 DeepSeek 官方接入配置" Cyan
+    Write-ColorOutput "  请选择要创建的模型（初始全选）：" DarkGray
+    $drawn = $false
+    while ($true) {
+        if ($drawn) { Write-Host "$esc[$($rowCount)A" -NoNewline }
+        for ($i = 0; $i -lt $total; $i++) {
+            $mark = if ($checked[$i]) { '•' } else { ' ' }
+            $ind  = if ($i -eq $cursor) { '›' } else { ' ' }
+            Write-ColorOutput "  $ind [$mark] $($i + 1)) $($options[$i].Label)" Green
+        }
+        Write-ColorOutput "  空格 选中/取消 · ↑/↓ 移动 · 回车 确认 · q 取消" DarkGray
+        Write-ColorOutput "" White
+        $drawn = $true
+
+        # 非交互/重定向输入降级：输入数字（空格或逗号分隔）后回车确认
+        if ([Console]::IsInputRedirected) {
+            $line = Read-Host
+            if ($line -eq 'q' -or $line -eq 'Q') { return $false }
+            $picks = @($line -split '[,\s]+' | Where-Object { $_ -ne '' })
+            if ($picks.Count -eq 0) { continue }
+            for ($i = 0; $i -lt $total; $i++) { $checked[$i] = $false }
+            foreach ($p in $picks) {
+                $n = 0
+                if ([int]::TryParse([string]$p, [ref]$n) -and $n -ge 1 -and $n -le $total) {
+                    $checked[$n - 1] = $true
+                }
+            }
+            break
+        }
+
+        $ki = [Console]::ReadKey($true)
+        if ($ki.Key -eq [ConsoleKey]::UpArrow) {
+            $cursor = ($cursor + $total - 1) % $total
+        } elseif ($ki.Key -eq [ConsoleKey]::DownArrow) {
+            $cursor = ($cursor + 1) % $total
+        } elseif ($ki.Key -eq [ConsoleKey]::Spacebar) {
+            $checked[$cursor] = -not $checked[$cursor]
+            $cursor = ($cursor + 1) % $total
+        } elseif ($ki.Key -eq [ConsoleKey]::Enter) {
+            break
+        } elseif ($ki.KeyChar -eq 'q' -or $ki.KeyChar -eq 'Q') {
+            return $false
+        }
     }
+
+    $pickedNames = [System.Collections.Generic.List[string]]::new()
+    $pickedContents = [System.Collections.Generic.List[string]]::new()
+    for ($i = 0; $i -lt $total; $i++) {
+        if ($checked[$i]) {
+            $pickedNames.Add($options[$i].Name)
+            $pickedContents.Add($options[$i].Content)
+        }
+    }
+    if ($pickedNames.Count -eq 0) {
+        Write-ColorOutput "  未选择任何模型，已取消" Yellow
+        return $false
+    }
+    $first = $pickedNames[0]
 
     Write-ColorOutput "" White
     Write-ColorOutput "  🔑 DeepSeek API Key" Cyan
     Write-ColorOutput "  在 platform.deepseek.com/api_keys 创建，可留空稍后手动填入模板" DarkGray
     $key = Read-Secret '  API Key › '
 
-    $path = Write-TemplateFile -Name $name -Content $content -ApiKey $key -ModelsDir $script:ModelsDir
-    Write-ColorOutput "  ✅ 模板已创建：$path" Green
-    $jsonPath = Write-ModelsJsonFile -Path $script:ModelsJson
-    Write-ColorOutput "  ✅ 模型目录已写入：$jsonPath" Green
+    $paths = New-DeepseekTemplates -Names @($pickedNames) -Contents @($pickedContents) -ApiKey $key -ModelsDir $script:ModelsDir -ModelsJsonPath $script:ModelsJson
+    foreach ($path in $paths) { Write-ColorOutput "  ✅ 模板已创建：$path" Green }
+    Write-ColorOutput "  ✅ 模型目录已写入：$($script:ModelsJson)" Green
 
     if (-not [System.IO.File]::Exists($script:ConfigPath)) {
-        Write-ColorOutput "  未发现 config.toml，已直接初始化为该模板" DarkGray
-        $tpl = [System.IO.File]::ReadAllText($path, [System.Text.UTF8Encoding]::new($false))
+        Write-ColorOutput "  未发现 config.toml，已直接初始化为 $first" DarkGray
+        $tplPath = Join-Path $script:ModelsDir "$first.toml"
+        $tpl = [System.IO.File]::ReadAllText($tplPath, [System.Text.UTF8Encoding]::new($false))
         [System.IO.File]::WriteAllText($script:ConfigPath, $tpl, [System.Text.UTF8Encoding]::new($false))
     } else {
-        $ans = Read-Host '  是否立即切换到该模板？[y/N] › '
-        if ($ans -eq 'y' -or $ans -eq 'Y') { Invoke-Use -Name $name }
+        $prompt = if ($pickedNames.Count -eq 1) { "  是否立即切换到该模板（$first）？[y/N] › " } else { "  是否立即切换到默认模型（$first）？[y/N] › " }
+        $ans = Read-Host $prompt
+        if ($ans -eq 'y' -or $ans -eq 'Y') { Invoke-Use -Name $first }
     }
+    return $true
+}
+
+# === 向导：模型配置来源选择（首次向导与菜单“新建配置”共用） ===
+function Invoke-ChooseSource {
+    Write-ColorOutput "  📦 模型配置来源" Cyan
+    Write-ColorOutput "  " White -NoNewline
+    Write-ColorOutput "1)" Green -NoNewline
+    Write-ColorOutput " 我有模板 — 打开目录手动导入" White
+    Write-ColorOutput "  " White -NoNewline
+    Write-ColorOutput "2)" Green -NoNewline
+    Write-ColorOutput " DeepSeek 官方接入配置 — 🐳" White
+    Write-ColorOutput "  q 取消" DarkGray
+    while ($true) {
+        $choice = Read-Host '  选择 [1-2] › '
+        if ($choice -eq 'q' -or $choice -eq 'Q') {
+            Write-ColorOutput "  已取消" DarkGray
+            return $false
+        }
+        switch ($choice) {
+            '1' { return (Invoke-ImportTemplate) }
+            '2' { return (Invoke-BuiltinTemplate) }
+        }
+        Write-ColorOutput "  无效选择，请重试" Yellow
+    }
+}
+
+# === 新建模型配置（菜单 N：日常已有模板时也能新建 DeepSeek/导入模板） ===
+function Invoke-NewConfig {
+    Write-ColorOutput "  🆕 新建模型配置" Cyan
+    Write-ColorOutput "  创建新的模型模板，已有配置与状态不受影响" DarkGray
+    Write-ColorOutput "" White
+    if (-not (Invoke-ChooseSource)) {
+        Write-ColorOutput "  已取消" DarkGray
+        return $false
+    }
+    Write-ColorOutput "  ✅ 新建配置完成" Green
     return $true
 }
 
@@ -933,26 +1044,9 @@ function Invoke-FirstRun {
         if ($ans -eq 'q' -or $ans -eq 'Q') { return $false }
     }
 
-    # ② 模板来源（两分支）
-    Write-ColorOutput "  📦 模型配置来源" Cyan
-    Write-ColorOutput "  " White -NoNewline
-    Write-ColorOutput "1)" Green -NoNewline
-    Write-ColorOutput " 我有模板 — 打开目录手动导入" White
-    Write-ColorOutput "  " White -NoNewline
-    Write-ColorOutput "2)" Green -NoNewline
-    Write-ColorOutput " DeepSeek 官方接入配置 — 🐳" White
-    Write-ColorOutput "  q 退出向导" DarkGray
-    while ($true) {
-        $choice = Read-Host '  选择 [1-2] › '
-        if ($choice -eq 'q' -or $choice -eq 'Q') { return $false }
-        switch ($choice) {
-            '1' {
-                if (-not (Invoke-ImportTemplate)) { Write-ColorOutput "  跳过导入，进入菜单" DarkGray }
-                return $true
-            }
-            '2' { return (Invoke-BuiltinTemplate) }
-        }
-        Write-ColorOutput "  无效选择，请重试" Yellow
+    # ② 模板来源（两分支：首次向导与菜单“新建配置”共用同一选择器）
+    if (-not (Invoke-ChooseSource)) {
+        Write-ColorOutput "  跳过配置创建，进入菜单" DarkGray
     }
 
     Write-ColorOutput "" White
@@ -1107,15 +1201,23 @@ function Invoke-Menu {
 
         Write-Host ''
 
-        Write-ColorOutput "  操作：U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出" DarkGray
+        Write-ColorOutput "  操作：N 新建配置 · U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出" DarkGray
         Write-ColorOutput "" White
         if ($files.Count -gt 0) {
             $choice = Read-Host "  选择模型 [1-$($files.Count)] › "
         } else {
-            $choice = Read-Host "  操作：U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出 › "
+            $choice = Read-Host "  操作：N 新建配置 · U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出 › "
         }
         if ($choice -eq 'q' -or $choice -eq 'Q') { return }
         if ([string]::IsNullOrWhiteSpace($choice)) { continue }
+
+        # 字母 n：新建模型配置（DeepSeek 多选 / 导入模板，日常有模板也可用）
+        if ($choice -eq 'n' -or $choice -eq 'N') {
+            Invoke-NewConfig | Out-Null
+            Write-ColorOutput "" White
+            if (-not (Read-MenuReturn)) { return }
+            continue
+        }
 
         # 字母 o：在 Windows 资源管理器中打开模板目录（失败降级提示，与 Linux xdg-open 一致）
         if ($choice -eq 'o' -or $choice -eq 'O') {
@@ -1314,7 +1416,7 @@ function Invoke-Uninstall {
 # === 主分发 ===
 function Show-HelpText {
     Write-ColorOutput "用法: codex-swap [use <name>] | [list] | [current] | [update] | [doctor] | [uninstall] | [help]" White
-    Write-ColorOutput "      菜单内: o 打开模板目录，u 检查并升级" DarkGray
+    Write-ColorOutput "      菜单内: n 新建配置 · o 打开模板目录 · u 检查并升级" DarkGray
     Write-ColorOutput "      首次运行（模板目录为空）自动进入初始化向导" DarkGray
 }
 
@@ -1373,5 +1475,6 @@ Export-ModuleMember -Function @(
     'Get-CodexInstallHint',
     'Test-CodexVersion',
     'Write-TemplateFile',
-    'Write-ModelsJsonFile'
+    'Write-ModelsJsonFile',
+    'New-DeepseekTemplates'
 )

@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.61"
+VERSION="0.2.62"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -460,7 +460,7 @@ cmd_doctor() {
 
 show_help() {
     echo "用法: codex-swap [use <name>] | [list] | [current] | [update] | [doctor] | [uninstall] | [help]"
-    echo "      菜单内: o 打开模板目录，u 检查并升级"
+    echo "      菜单内: n 新建配置 · o 打开模板目录 · u 检查并升级"
     echo "      首次运行（模板目录为空）自动进入初始化向导"
 }
 
@@ -783,38 +783,104 @@ wizard_write_models_json() {
     printf "  ${GREEN}✅ 模型目录已写入：${C}%s\n" "$MODELS_JSON"
 }
 
-# === 向导：内置 🐳 DeepSeek 模板选择 + API Key 引导 ===
+# === 向导：内置 🐳 DeepSeek 模板多选（空格/数字/方向键）+ API Key 引导 ===
 wizard_builtin_template() {
-    printf "  ${GREEN}1)${C} 🐳 DeepSeek-V4-Flash — 默认模型，快速，适合日常编码\n"
-    printf "  ${GREEN}2)${C} 🐳 DeepSeek-V4-Pro — 深度推理，适合复杂任务\n"
-    local choice name content key ans
-    read -r -p "  选择 [1-2] › " choice || { printf "\n"; return 1; }
-    case "$choice" in
-        1) name="deepseek"     ; content="$TEMPLATE_DEEPSEEK" ;;
-        2) name="deepseek-pro" ; content="$TEMPLATE_DEEPSEEK_PRO" ;;
-        *) printf "${YELLOW}  无效选择，默认使用 DeepSeek-V4-Flash${C}\n"
-           name="deepseek"; content="$TEMPLATE_DEEPSEEK" ;;
-    esac
+    local -a ds_names=("deepseek" "deepseek-pro")
+    local -a ds_contents=("$TEMPLATE_DEEPSEEK" "$TEMPLATE_DEEPSEEK_PRO")
+    local -a ds_labels=(
+        "DeepSeek-V4-Flash — 默认模型，快速，适合日常编码"
+        "DeepSeek-V4-Pro — 深度推理，适合复杂任务"
+    )
+    local -a checked=(1 1)
+    local cursor=0 total="${#ds_names[@]}" i ch rest key ans
+    local rows=$((total + 2)) first_name=""
+    local -a picked_names=() picked_contents=()
 
-    printf "\n  ${CYAN}🔑 DeepSeek API Key${C}\n"
+    draw_multi() {
+        local i mark ind
+        for ((i = 0; i < total; i++)); do
+            mark=" "; ind=" "
+            [ "${checked[$i]}" = 1 ] && mark="•"
+            [ "$i" -eq "$cursor" ] && ind="›"
+            printf "  ${GREEN}%s${C} [%s] %d) %s\n" "$ind" "$mark" "$((i + 1))" "${ds_labels[$i]}"
+        done
+        printf "  ${DGRAY}空格 选中/取消 · ↑/↓ 移动 · 回车 确认 · q 取消${C}\n"
+        printf "\n"
+    }
+
+    printf "  ${CYAN}🐳 DeepSeek 官方接入配置${C}\n"
+    printf "  ${DGRAY}请选择要创建的模型（初始全选）：${C}\n"
+    draw_multi
+    while true; do
+        IFS= read -r -s -n1 ch || { printf "\n"; return 1; }
+        case "$ch" in
+            $'\x1b')
+                IFS= read -r -s -n2 rest || { printf "\n"; return 1; }
+                case "$rest" in
+                    '[A') cursor=$(( (cursor + total - 1) % total )) ;;
+                    '[B') cursor=$(( (cursor + 1) % total )) ;;
+                esac
+                ;;
+            ' ') checked[cursor]=$((1 - checked[cursor])); cursor=$(( (cursor + 1) % total )) ;;
+            $'\n'|$'\r'|'') printf "\n"; break ;;
+            q|Q) printf "\n"; return 1 ;;
+        esac
+        printf "\033[%dA" "$rows"
+        draw_multi
+    done
+
+    for ((i = 0; i < total; i++)); do
+        if [ "${checked[$i]}" = 1 ]; then
+            picked_names+=("${ds_names[$i]}")
+            picked_contents+=("${ds_contents[$i]}")
+        fi
+    done
+    [ "${#picked_names[@]}" -eq 0 ] && { printf "${YELLOW}  未选择任何模型，已取消${C}\n"; return 1; }
+
+    printf "  ${CYAN}🔑 DeepSeek API Key${C}\n"
     printf "  ${DGRAY}在 platform.deepseek.com/api_keys 创建，可留空稍后手动填入模板${C}\n"
     read_secret "  API Key › "
     key="$SECRET_INPUT"
 
     mkdir -p "$MODELS_DIR"
-    wizard_write_template "$name" "$content" "$key"
+    for ((i = 0; i < ${#picked_names[@]}; i++)); do
+        wizard_write_template "${picked_names[$i]}" "${picked_contents[$i]}" "$key"
+        [ -z "$first_name" ] && first_name="${picked_names[$i]}"
+    done
     wizard_write_models_json
 
     if [ ! -f "$CONFIG" ]; then
-        printf "  ${DGRAY}未发现 config.toml，已直接初始化为该模板${C}\n"
-        cp "$MODELS_DIR/$name.toml" "$CONFIG"
+        printf "  ${DGRAY}未发现 config.toml，已直接初始化为 ${first_name}${C}\n"
+        cp "$MODELS_DIR/$first_name.toml" "$CONFIG"
     else
-        read -r -p "  是否立即切换到该模板？[y/N] › " ans || true
+        if [ "${#picked_names[@]}" -eq 1 ]; then
+            read -r -p "  是否立即切换到该模板（${first_name}）？[y/N] › " ans || true
+        else
+            read -r -p "  是否立即切换到默认模型（${first_name}）？[y/N] › " ans || true
+        fi
         if [ "$ans" = y ] || [ "$ans" = Y ]; then
-            cmd_use "$name" || true
+            cmd_use "$first_name" || true
         fi
     fi
     return 0
+}
+
+# === 向导：模型配置来源选择（首次向导与菜单“新建配置”共用） ===
+wizard_choose_source() {
+    printf "  ${BOLD_CYAN}📦 模型配置来源${C}\n"
+    printf "  ${GREEN}1)${C} 我有模板 — 打开目录手动导入\n"
+    printf "  ${GREEN}2)${C} DeepSeek 官方接入配置 — 🐳\n"
+    printf "  ${DGRAY}q 取消${C}\n"
+    local choice
+    while true; do
+        read -r -p "  选择 [1-2] › " choice || { printf "\n"; return 1; }
+        case "$choice" in
+            1) wizard_import_template; return $? ;;
+            2) wizard_builtin_template; return $? ;;
+            q|Q) printf "${DGRAY}  已取消${C}\n"; return 1 ;;
+            *) printf "${YELLOW}  无效选择，请重试${C}\n" ;;
+        esac
+    done
 }
 
 # === 首次使用向导 ===
@@ -825,22 +891,21 @@ cmd_first_run() {
     wizard_check_codex || return 1
     wizard_check_version || return 1
 
-    printf "  ${BOLD_CYAN}📦 模型配置来源${C}\n"
-    printf "  ${GREEN}1)${C} 我有模板 — 打开目录手动导入\n"
-    printf "  ${GREEN}2)${C} DeepSeek 官方接入配置 — 🐳\n"
-    printf "  ${DGRAY}q 退出向导${C}\n"
-    local choice
-    while true; do
-        read -r -p "  选择 [1-2] › " choice || { printf "\n"; return 1; }
-        case "$choice" in
-            1) wizard_import_template || { printf "${DGRAY}  跳过导入，进入菜单${C}\n"; } ; break ;;
-            2) wizard_builtin_template || return 1 ; break ;;
-            q|Q) printf "${DGRAY}  已退出向导${C}\n"; return 1 ;;
-            *) printf "${YELLOW}  无效选择，请重试${C}\n" ;;
-        esac
-    done
-    printf "\n  ${DGRAY}✨ 初始化完成${C}\n"
+    if wizard_choose_source; then
+        printf "\n  ${DGRAY}✨ 初始化完成${C}\n"
+    else
+        printf "${DGRAY}  跳过配置创建，进入菜单${C}\n"
+    fi
     wait_for_menu "  按回车进入菜单，q 退出 › " || return 1
+    return 0
+}
+
+# === 新建模型配置（菜单 N：日常已有模板时也能新建 DeepSeek/导入模板） ===
+cmd_new_config() {
+    printf "${BOLD_CYAN}  🆕 新建模型配置${C}\n"
+    printf "${DGRAY}  创建新的模型模板，已有配置与状态不受影响${C}\n\n"
+    wizard_choose_source || { printf "${DGRAY}  已取消${C}\n"; return 1; }
+    printf "  ${GREEN}✅ 新建配置完成${C}\n"
     return 0
 }
 
@@ -864,16 +929,21 @@ cmd_menu() {
         cmd_list
         local files=("$MODELS_DIR"/*.toml) prompt
         if [ -f "${files[0]:-}" ]; then
-            printf "${DGRAY}  操作：U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出${C}\n"
+            printf "${DGRAY}  操作：N 新建配置 · U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出${C}\n"
             echo ""
             prompt="  选择模型 [1-${#files[@]}] › "
         else
-            prompt="  操作：U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出 › "
+            prompt="  操作：N 新建配置 · U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出 › "
         fi
         read -r -p "$prompt" choice || break
         case "$choice" in
             q|Q) return ;;
             "" ) continue ;;
+            n|N)
+                cmd_new_config || true
+                wait_for_menu "  按回车返回菜单，q 退出 › " || return 0
+                continue
+                ;;
             o|O) open_dir "$MODELS_DIR"; continue ;;
             u|U)
                 cmd_update

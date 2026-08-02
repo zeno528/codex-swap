@@ -112,12 +112,37 @@ cat > "$fake_bin/codex" <<'EOF'
 [ "$1" = "--version" ] && printf '0.144.0\n'
 EOF
 chmod +x "$fake_bin/codex"
-output="$(printf '2\n2\nsk-wizard-test-key\nN\nq\n' | CODEX_HOME="$wizard_home" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
+# 多选交互：空格取消 Flash（光标自动下移）→ 回车确认 → 只创建 Pro
+output="$(printf '2\n \nsk-wizard-test-key\n\nq\n' | CODEX_HOME="$wizard_home" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
 grep -q '模板已创建' <<< "$output"
 grep -q 'deepseek-v4-pro' "$wizard_home/models/deepseek-pro.toml"
 grep -q 'sk-wizard-test-key' "$wizard_home/models/deepseek-pro.toml"
 grep -q 'deepseek-v4-pro' "$wizard_home/config.toml"
 grep -q 'deepseek-v4-flash' "$wizard_home/models.json"
 grep -q 'deepseek-v4-pro' "$wizard_home/models.json"
+
+# 菜单内 N 新建配置：已有模板时仍能进入 DeepSeek 向导（多选只选 Pro）
+new_home="$test_root/newcfg"
+mkdir -p "$new_home/models" "$new_home/model-states"
+printf '%s\n' 'model = "gpt-5.6-terra"' 'model_provider = "openai"' > "$new_home/models/gpt.toml"
+printf '%s\n' 'model = "gpt-5.6-terra"' > "$new_home/config.toml"
+output="$(printf 'n\n2\n \nsk-newcfg-key\nN\n\nq\n' | CODEX_HOME="$new_home" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
+grep -q 'N 新建配置' <<< "$output"
+grep -q '新建配置完成' <<< "$output"
+grep -q 'deepseek-v4-pro' "$new_home/models/deepseek-pro.toml"
+grep -q 'sk-newcfg-key' "$new_home/models/deepseek-pro.toml"
+grep -q 'deepseek-v4-pro' "$new_home/models.json"
+test -f "$new_home/models/gpt.toml"
+grep -q 'gpt-5.6-terra' "$new_home/config.toml"
+
+# 多选全选：回车直接创建两个 DeepSeek 模板，config 不存在时初始化为第一个
+both_home="$test_root/both"
+mkdir -p "$both_home"
+output="$(printf '2\n\nsk-both-key\n\nq\n' | CODEX_HOME="$both_home" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
+grep -q 'deepseek-v4-flash' "$both_home/models/deepseek.toml"
+grep -q 'deepseek-v4-pro' "$both_home/models/deepseek-pro.toml"
+grep -q 'sk-both-key' "$both_home/models/deepseek.toml"
+grep -q 'sk-both-key' "$both_home/models/deepseek-pro.toml"
+grep -q 'deepseek-v4-flash' "$both_home/config.toml"
 
 echo 'Linux 端到端切换测试通过'

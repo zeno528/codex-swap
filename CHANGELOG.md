@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.62] - 2026-08-02
+
+- ✨ feat(wizard): 菜单内新增新建配置入口并支持 DeepSeek 模板多选
+
+
 ## [0.2.61] - 2026-08-02
 
 - ✨ feat(provider): 支持缺省 OpenAI provider 并优化激活识别
