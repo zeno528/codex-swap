@@ -87,8 +87,8 @@ try {
     [System.IO.File]::WriteAllText($cfg2, 'model = "x"' + "`n" + 'model_provider = "p"' + "`n" + 'experimental_bearer_token = "test-token-BBBBBBBBBB22222222222222"', [System.Text.UTF8Encoding]::new($false))
 
     $markers = Resolve-ActiveMarkers -Files @($t1, $t2) -ConfigPath $cfg2
-    Assert-True ($markers[$t1] -eq 'active') '同 model+provider 模板 1 标为 active'
-    Assert-True ($markers[$t2] -eq 'active') '同 model+provider 模板 2 标为 active'
+    Assert-True ($markers[$t1] -eq 'none') '同 model+provider 多命中：指纹不匹配不标'
+    Assert-True ($markers[$t2] -eq 'active') '同 model+provider 多命中：指纹匹配标 active'
 } finally { Remove-Item $tmpDir2 -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== Test 5: Save-ModelState + Get-SwitchContent 状态优先 ===" -ForegroundColor Cyan
@@ -337,6 +337,46 @@ try {
     Assert-True (-not [System.IO.File]::Exists($p)) '空描述清除文件'
     Assert-True ((Get-TemplateDescription -Name 'gpt' -DescriptionsDir $tmpD) -eq '') '清除后返回空'
 } finally { Remove-Item $tmpD -Recurse -Force -ErrorAction SilentlyContinue }
+
+Write-Host "`n=== Test 20: 激活识别边界（大小写敏感 + 第三方严格匹配） ===" -ForegroundColor Cyan
+$tmpB = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $tmpB | Out-Null
+try {
+    # 第三方同 model+provider 且无 token：多命中无法消歧 → 全部 none
+    $c1 = Join-Path $tmpB 'deepseek-cc.toml'
+    [System.IO.File]::WriteAllText($c1, 'model = "deepseek-v4-flash"' + "`n" + 'model_provider = "custom"', [System.Text.UTF8Encoding]::new($false))
+    $c2 = Join-Path $tmpB 'deepseek-cc-goals.toml'
+    [System.IO.File]::WriteAllText($c2, 'model = "deepseek-v4-flash"' + "`n" + 'model_provider = "custom"', [System.Text.UTF8Encoding]::new($false))
+    $cfgB = Join-Path $tmpB 'config.toml'
+    [System.IO.File]::WriteAllText($cfgB, 'model = "deepseek-v4-flash"' + "`n" + 'model_provider = "custom"', [System.Text.UTF8Encoding]::new($false))
+    $markers = Resolve-ActiveMarkers -Files @($c1, $c2) -ConfigPath $cfgB
+    Assert-True ($markers[$c1] -eq 'none' -and $markers[$c2] -eq 'none') '第三方多命中无指纹不误标'
+    Assert-True ($null -eq (Resolve-ActiveName -Files @($c1, $c2) -ConfigPath $cfgB)) 'Resolve-ActiveName 多命中无指纹返回 $null'
+
+    # 大小写敏感：model 大小写不同不匹配
+    $cu = Join-Path $tmpB 'upper.toml'
+    [System.IO.File]::WriteAllText($cu, 'model = "DeepSeek-v4-flash"' + "`n" + 'model_provider = "custom"', [System.Text.UTF8Encoding]::new($false))
+    $cfgU = Join-Path $tmpB 'upper-config.toml'
+    [System.IO.File]::WriteAllText($cfgU, 'model = "deepseek-v4-flash"' + "`n" + 'model_provider = "custom"', [System.Text.UTF8Encoding]::new($false))
+    $markers = Resolve-ActiveMarkers -Files @($cu) -ConfigPath $cfgU
+    Assert-True ($markers[$cu] -eq 'none') 'model 大小写不同不标 active'
+
+    # 第三方单 provider 不允许“模型变化”回退
+    $cd = Join-Path $tmpB 'only.toml'
+    [System.IO.File]::WriteAllText($cd, 'model = "deepseek-v4-flash"' + "`n" + 'model_provider = "custom"', [System.Text.UTF8Encoding]::new($false))
+    $cfgD = Join-Path $tmpB 'only-config.toml'
+    [System.IO.File]::WriteAllText($cfgD, 'model = "deepseek-v4-pro"' + "`n" + 'model_provider = "custom"', [System.Text.UTF8Encoding]::new($false))
+    $markers = Resolve-ActiveMarkers -Files @($cd) -ConfigPath $cfgD
+    Assert-True ($markers[$cd] -eq 'none') '第三方单 provider 模型变化不标 active'
+
+    # OpenAI 回退保留：单 provider 模型变化仍标 active
+    $oe = Join-Path $tmpB 'openai.toml'
+    [System.IO.File]::WriteAllText($oe, 'model = "gpt-5.6-terra"', [System.Text.UTF8Encoding]::new($false))
+    $cfgE = Join-Path $tmpB 'openai-config.toml'
+    [System.IO.File]::WriteAllText($cfgE, 'model = "gpt-5.6-luna"', [System.Text.UTF8Encoding]::new($false))
+    $markers = Resolve-ActiveMarkers -Files @($oe) -ConfigPath $cfgE
+    Assert-True ($markers[$oe] -eq 'active') 'openai 单 provider 模型变化仍标 active'
+} finally { Remove-Item $tmpB -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== 总结 ===" -ForegroundColor Cyan
 Write-Host "通过: $pass" -ForegroundColor Green

@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.68'
+$script:ScriptVersion = '0.2.69'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -173,7 +173,7 @@ function Get-CurrentFingerprint {
     return @{ Model = $m; Provider = (Get-EffectiveProvider $p); TokenFingerprint = $fp }
 }
 
-# === 核心：标记每个模板是 active/none（精确匹配优先，单一 provider 允许模型变化） ===
+# === 核心：标记每个模板是 active/none（大小写敏感；多命中用 token 指纹消歧） ===
 # 返回: 路径 -> 'active' | 'none'
 function Resolve-ActiveMarkers {
     param(
@@ -185,17 +185,26 @@ function Resolve-ActiveMarkers {
     $exactFiles = @()
     foreach ($f in $Files) {
         $fp = Get-TemplateFingerprint -Path $f
-        if ($fp.Provider -eq $current.Provider) {
+        if ($fp.Provider -ceq $current.Provider) {
             $providerFiles += $f
-            if (-not [string]::IsNullOrWhiteSpace($current.Model) -and $null -ne $fp.Model -and $fp.Model -eq $current.Model) {
+            if (-not [string]::IsNullOrWhiteSpace($current.Model) -and $null -ne $fp.Model -and $fp.Model -ceq $current.Model) {
                 $exactFiles += $f
             }
         }
     }
     $activeFiles = @()
     if ($exactFiles.Count -gt 0) {
-        $activeFiles = $exactFiles
-    } elseif ($null -ne $current.Model -and $providerFiles.Count -eq 1) {
+        if ($exactFiles.Count -eq 1 -or $current.Provider -ceq 'openai') {
+            $activeFiles = $exactFiles
+        } elseif (-not [string]::IsNullOrWhiteSpace($current.TokenFingerprint)) {
+            foreach ($f in $exactFiles) {
+                $tf = Get-TemplateFingerprint -Path $f
+                if (-not [string]::IsNullOrWhiteSpace($tf.TokenFingerprint) -and $tf.TokenFingerprint -ceq $current.TokenFingerprint) {
+                    $activeFiles += $f
+                }
+            }
+        }
+    } elseif ($current.Provider -ceq 'openai' -and $null -ne $current.Model -and $providerFiles.Count -eq 1) {
         $activeFiles = $providerFiles
     }
     $markers = @{}
@@ -206,8 +215,8 @@ function Resolve-ActiveMarkers {
 }
 
 # === 核心：找出当前 config.toml 对应哪个模板（源模型名） ===
-# 与 Linux resolve_active 一致：model+provider 精确命中优先；
-# 无精确命中且 provider 仅一个模板时允许模型变化；多命中用 token 指纹消歧。
+# 与 Linux resolve_active 一致：model+provider 精确命中优先（大小写敏感）；
+# 无精确命中时仅 openai 允许单一 provider 模型变化回退；多命中用 token 指纹消歧。
 # 返回: 模板名（不带 .toml），匹配不到返回 $null
 function Resolve-ActiveName {
     param(
@@ -221,9 +230,9 @@ function Resolve-ActiveName {
     $providerHits = [System.Collections.Generic.List[hashtable]]::new()
     foreach ($f in $Files) {
         $fp = Get-TemplateFingerprint -Path $f
-        if ($fp.Provider -eq $current.Provider) {
+        if ($fp.Provider -ceq $current.Provider) {
             $providerHits.Add(@{ Path = $f; Fingerprint = $fp.TokenFingerprint })
-            if ($null -ne $fp.Model -and $fp.Model -eq $current.Model) {
+            if ($null -ne $fp.Model -and $fp.Model -ceq $current.Model) {
                 $hits.Add(@{ Path = $f; Fingerprint = $fp.TokenFingerprint })
             }
         }
@@ -234,12 +243,12 @@ function Resolve-ActiveName {
     }
     if ($hits.Count -gt 1 -and -not [string]::IsNullOrEmpty($current.TokenFingerprint)) {
         foreach ($h in $hits) {
-            if ($h.Fingerprint -eq $current.TokenFingerprint) {
+            if (-not [string]::IsNullOrEmpty($h.Fingerprint) -and $h.Fingerprint -ceq $current.TokenFingerprint) {
                 return [System.IO.Path]::GetFileNameWithoutExtension($h.Path)
             }
         }
     }
-    if ($hits.Count -eq 0 -and $null -ne $current.Model -and $providerHits.Count -eq 1) {
+    if ($hits.Count -eq 0 -and $current.Provider -ceq 'openai' -and $null -ne $current.Model -and $providerHits.Count -eq 1) {
         return [System.IO.Path]::GetFileNameWithoutExtension($providerHits[0].Path)
     }
     return $null

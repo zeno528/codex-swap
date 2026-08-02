@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.68"
+VERSION="0.2.69"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -138,7 +138,7 @@ resolve_active() {
             [ "${h#*|}" = "$cur_fp" ] && { echo "$(basename "${h%%|*}" .toml)"; return; }
         done
     fi
-    if [ "${#hits[@]}" -eq 0 ] && [ "${#provider_hits[@]}" -eq 1 ]; then
+    if [ "${#hits[@]}" -eq 0 ] && [ "$cur_provider" = "openai" ] && [ "${#provider_hits[@]}" -eq 1 ]; then
         echo "$(basename "${provider_hits[0]}" .toml)"; return
     fi
     echo ""
@@ -302,9 +302,10 @@ cmd_list() {
         return
     }
 
-    local cur_model cur_provider provider_matches=0 exact_matches=0
+    local cur_model cur_provider cur_fp provider_matches=0 exact_matches=0
     cur_model=$(get_field "$CONFIG" model)
     cur_provider=$(effective_provider "$(get_field "$CONFIG" model_provider)")
+    cur_fp=$(token_fp "$(get_field "$CONFIG" experimental_bearer_token)")
 
     local f model provider
     for f in "$MODELS_DIR"/*.toml; do
@@ -333,7 +334,7 @@ cmd_list() {
     table_row '编号' '状态' '名称' '模型' '供应商' "$BOLD_CYAN" "$name_width" '描述'
     table_rule '├' '┼' '┤' 4 6 "$name_width" 26 14 26
 
-    local i=0 name status color desc
+    local i=0 name status color desc fp
     for f in "$MODELS_DIR"/*.toml; do
         [ -f "$f" ] || continue
         i=$((i+1))
@@ -346,9 +347,17 @@ cmd_list() {
         status=''
         color="$C"
         if [ -n "$cur_model" ] && [ "$model" = "$cur_model" ] && [ "$provider" = "$cur_provider" ]; then
-            status='✅'
-            color="$BOLD_GREEN"
-        elif [ -n "$cur_model" ] && [ "$exact_matches" -eq 0 ] &&
+            if [ "$exact_matches" -eq 1 ] || [ "$cur_provider" = "openai" ]; then
+                status='✅'
+                color="$BOLD_GREEN"
+            elif [ -n "$cur_fp" ]; then
+                fp=$(token_fp "$(get_field "$f" experimental_bearer_token)")
+                if [ -n "$fp" ] && [ "$fp" = "$cur_fp" ]; then
+                    status='✅'
+                    color="$BOLD_GREEN"
+                fi
+            fi
+        elif [ "$cur_provider" = "openai" ] && [ -n "$cur_model" ] && [ "$exact_matches" -eq 0 ] &&
              [ "$provider_matches" -eq 1 ] && [ "$provider" = "$cur_provider" ]; then
             status='✅'
             color="$BOLD_GREEN"

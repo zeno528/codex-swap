@@ -46,6 +46,28 @@ output="$(CODEX_HOME="$long_home" bash linux/codex-swap list)"
 if grep -q 'very-long-template-name-1234567890' <<< "$output"; then exit 1; fi
 grep -q '\.\.\.' <<< "$output"
 
+# 激活识别边界：第三方（非 openai）严格匹配，不用 provider 宽泛判定
+edge_home="$test_root/edge/.codex"
+mkdir -p "$edge_home/models" "$edge_home/model-states"
+printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' > "$edge_home/models/deepseek-cc.toml"
+printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' > "$edge_home/models/deepseek-cc-goals.toml"
+printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' > "$edge_home/config.toml"
+output="$(CODEX_HOME="$edge_home" bash linux/codex-swap list)"
+if grep -q '✅' <<< "$output"; then exit 1; fi
+
+# 第三方单 provider：model 不同不允许“模型变化”回退
+printf '%s\n' 'model = "deepseek-v4-pro"' 'model_provider = "custom"' > "$edge_home/config.toml"
+output="$(CODEX_HOME="$edge_home" bash linux/codex-swap list)"
+if grep -q '✅' <<< "$output"; then exit 1; fi
+
+# model 大小写敏感：大小写不同不标激活
+edge2_home="$test_root/edge2/.codex"
+mkdir -p "$edge2_home/models" "$edge2_home/model-states"
+printf '%s\n' 'model = "DeepSeek-v4-flash"' 'model_provider = "custom"' > "$edge2_home/models/upper.toml"
+printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' > "$edge2_home/config.toml"
+output="$(CODEX_HOME="$edge2_home" bash linux/codex-swap list)"
+if grep -q '✅' <<< "$output"; then exit 1; fi
+
 output="$(bash linux/codex-swap use gpt)"
 grep -q '已切换至 gpt' <<< "$output"
 grep -q '📋 当前配置 · 4 行' <<< "$output"
