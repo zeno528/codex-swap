@@ -34,7 +34,6 @@ fi
 for tool in curl unzip; do
     command -v "$tool" >/dev/null 2>&1 || fail "缺少 $tool，请先安装（sudo apt install $tool）"
 done
-say "前置工具检查通过（curl / unzip）"
 
 # ---------- 获取 Release ----------
 VERSION="${1:-}"
@@ -43,7 +42,6 @@ if [ -n "$VERSION" ]; then
 else
     REL_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
 fi
-echo "  获取 Release 并下载..."
 JSON="$(curl -fsSL -H 'User-Agent: codex-swap-installer' "$REL_URL")" || fail "获取 Release 失败（网络或限流）"
 TAG="$(printf '%s' "$JSON" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
 URL="$(printf '%s' "$JSON" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*codex-swap-linux\.zip"' | head -n1 | sed 's/.*"\(http[^"]*\)".*/\1/')"
@@ -57,13 +55,11 @@ unzip -qo "$TMP/$ASSET_NAME" -d "$TMP/x" || fail "解压失败"
 NEW="$TMP/x/codex-swap"
 [ -f "$NEW" ] || fail "包内缺少 codex-swap 主脚本"
 bash -n "$NEW" || fail "主脚本语法校验失败"
-say "下载与语法校验通过"
 
 # ---------- 安装 ----------
 mkdir -p "$BIN_DIR"
 if [ -f "$LAUNCHER" ]; then
     cp "$LAUNCHER" "$LAUNCHER.old"
-    warn "旧版本已备份"
 fi
 cp "$NEW" "$LAUNCHER"
 chmod +x "$LAUNCHER"
@@ -77,11 +73,10 @@ if [ -e "$SHORTCUT" ] || [ -L "$SHORTCUT" ]; then
 else
     ln -s "codex-swap" "$SHORTCUT"
 fi
-say "启动器与快捷命令已写入"
 
 # ---------- PATH ----------
 case ":$PATH:" in
-    *":$BIN_DIR:"*) say "~/.local/bin 已在 PATH 中" ;;
+    *":$BIN_DIR:"*) : ;;
     *)
         printf '\n# codex-swap\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME/.bashrc"
         [ -f "$HOME/.zshrc" ] && printf '\n# codex-swap\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME/.zshrc"
@@ -91,8 +86,5 @@ esac
 
 # ---------- 汇总 ----------
 printf '\n\033[32m✅ codex-swap %s 安装完成\033[0m\n' "$TAG"
-echo "   程序: $LAUNCHER"
-echo "   快捷: sw"
-echo "   数据目录: $HOME/.codex"
-echo "   使用: 新终端里运行 sw（或 codex-swap）"
+echo "   安装到: $LAUNCHER · 快捷: sw"
 echo "   升级: codex-swap update"
