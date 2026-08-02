@@ -1,417 +1,243 @@
-#!/usr/bin/env bash
-# ============================================================
-# codex-switch (Linux/WSL2 独立分支)
-# 纯 bash 实现，零 pwsh/Windows 依赖。原生工具: grep/sed/awk/curl/unzip
-# 机制与 Windows 版一致：模板播种 + 状态恢复
-#   ~/.codex/models/<name>.toml        模板（首次播种）
-#   ~/.codex/model-states/<name>.toml  各模型最新状态
-# ============================================================
-set -euo pipefail
+#requires -Version 7.0
+# codex-swap 核心模块
+# 切换 Codex 模型配置：模板播种 + 状态恢复
+# 数据目录：%USERPROFILE%\.codex
 
-VERSION="0.2.40"
-REPO_OWNER="zeno528"
-REPO_NAME="codex-switch"
-REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
-ASSET_NAME="codex-switch-linux.zip"
-API_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
-VERSION_URL="https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/VERSION"
+$script:ScriptVersion = '0.2.41'
+$script:RepoOwner      = 'zeno528'
+$script:RepoName       = 'codex-swap'
+$script:ReleaseAsset   = 'codex-swap-windows.zip'
+$script:VersionUrl     = "https://raw.githubusercontent.com/$($script:RepoOwner)/$($script:RepoName)/main/VERSION"
+$script:RepoUrl        = "https://github.com/$($script:RepoOwner)/$($script:RepoName)"
 
-CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-CONFIG="$CODEX_HOME/config.toml"
-AUTH_FILE="$CODEX_HOME/auth.json"
-MODELS_DIR="$CODEX_HOME/models"
-STATE_DIR="$CODEX_HOME/model-states"
-MODELS_JSON="$CODEX_HOME/models.json"
-DEEPSEEK_MIN_CODEX="0.144.0"
-UPDATED=false
-
-C='\033[0m' RED='\033[31m' GREEN='\033[32m' BOLD_GREEN='\033[1;32m' YELLOW='\033[33m' CYAN='\033[38;2;63;174;194m' BOLD_CYAN='\033[1;38;2;63;174;194m' DGRAY='\033[90m'
-
-say()  { printf "${GREEN}%s${C}\n" "$1"; }
-warn() { printf "${YELLOW}%s${C}\n" "$1"; }
-fail() { printf "${RED}%s${C}\n" "$1" >&2; exit 1; }
-
-# === 工具：提取 TOML 字段值（去引号） ===
-# 用法: get_field <文件> <key>  输出: 值（无引号）
-get_field() {
-    local file="$1" key="$2" line val
-    [ -f "$file" ] || { echo ""; return; }
-    line=$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" | head -n1 | sed 's/^[^=]*=[[:space:]]*//')
-    [ -z "$line" ] && { echo ""; return; }
-    val="${line#\"}"   # 去前引号
-    val="${val%\"}"    # 去后引号
-    echo "$val"
+function Get-CodexHome {
+    $home = if ($IsWindows) { $env:USERPROFILE } else { $env:HOME }
+    return Join-Path $home '.codex'
 }
 
-# === 工具：token 指纹（前6|后6，短 token 整串） ===
-token_fp() {
-    local t="$1"
-    [ -n "$t" ] || { echo ""; return; }
-    if [ "${#t}" -ge 12 ]; then
-        echo "${t:0:6}|${t: -6}"
-    else
-        echo "$t"
-    fi
+$script:CodexHome  = Get-CodexHome
+$script:ConfigPath = Join-Path $script:CodexHome 'config.toml'
+$script:AuthPath   = Join-Path $script:CodexHome 'auth.json'
+$script:ModelsDir  = Join-Path $script:CodexHome 'models'
+$script:StateDir   = Join-Path $script:CodexHome 'model-states'
+$script:ModelsJson = Join-Path $script:CodexHome 'models.json'
+$script:DeepseekMinCodex = '0.144.0'
+
+function Write-ColorOutput {
+    param(
+        [Parameter(Mandatory)] [AllowEmptyString()] [string]$Text,
+        [string]$Color = 'White'
+    )
+    Write-Host $Text -ForegroundColor $Color
 }
 
-# === 工具：semver 比较 v1 > v2 ? ===
-ver_gt() {
-    awk -v a="$1" -v b="$2" 'BEGIN{
-        split(a,A,"."); split(b,B,".");
-        for(i=1;i<=3;i++){ x=A[i]+0; y=B[i]+0; if(x>y) exit 0; if(x<y) exit 1 }
-        exit 1
-    }'
-}
-
-# === 工具：掩码密钥行 ===
-mask_line() {
-    local line="$1" val masked re
-    # 正则放变量里再展开，避免 [[ =~ ]] 直接解析复杂模式出错
-    re='((token|key|password|secret)[^=]*=[[:space:]]*")([^"]{16,})"'
-    if [[ "$line" =~ $re ]]; then
-        val="${BASH_REMATCH[3]}"
-        masked="${val:0:6}****${val: -6}"
-        echo "${line//$val/$masked}"
-    else
-        echo "$line"
-    fi
-}
-
-# === 核心：识别当前 config 对应的源模型名（无匹配输出空） ===
-resolve_active() {
-    local cur_model cur_provider cur_fp
-    cur_model=$(get_field "$CONFIG" model)
-    cur_provider=$(get_field "$CONFIG" model_provider)
-    cur_fp=$(token_fp "$(get_field "$CONFIG" experimental_bearer_token)")
-    [ -n "$cur_model" ] || { echo ""; return; }
-
-    local hits=() f model provider fp
-    for f in "$MODELS_DIR"/*.toml; do
-        [ -f "$f" ] || continue
-        model=$(get_field "$f" model)
-        provider=$(get_field "$f" model_provider)
-        if [ "$model" = "$cur_model" ] && [ "$provider" = "$cur_provider" ]; then
-            fp=$(token_fp "$(get_field "$f" experimental_bearer_token)")
-            hits+=("$f|$fp")
-        fi
-    done
-
-    if [ "${#hits[@]}" -eq 1 ]; then
-        echo "$(basename "${hits[0]%%|*}" .toml)"; return
-    fi
-    if [ "${#hits[@]}" -gt 1 ] && [ -n "$cur_fp" ]; then
-        local h
-        for h in "${hits[@]}"; do
-            [ "${h#*|}" = "$cur_fp" ] && { echo "$(basename "${h%%|*}" .toml)"; return; }
-        done
-    fi
-    echo ""
-}
-
-# === 核心：切出时保存/清空模型 auth 状态（默认托管，快照反映最新状态） ===
-save_model_auth() {
-    local name="$1"
-    mkdir -p "$STATE_DIR"
-    if [ -f "$AUTH_FILE" ]; then
-        cp "$AUTH_FILE" "$STATE_DIR/$name.auth.json"
-        printf "${DGRAY}  🔑 已保存 auth 状态：%s${C}\n" "$name"
-    else
-        rm -f "$STATE_DIR/$name.auth.json"
-    fi
-}
-
-# === 核心：切入时取目标 auth 源（状态优先，无状态用模板），无托管输出空 ===
-get_switch_auth() {
-    local name="$1"
-    [ -f "$STATE_DIR/$name.auth.json" ] && { echo "$STATE_DIR/$name.auth.json"; return; }
-    [ -f "$MODELS_DIR/$name.auth.json" ] && { echo "$MODELS_DIR/$name.auth.json"; return; }
-    echo ""
-}
-
-cmd_current() {
-    [ -f "$CONFIG" ] || fail "config 不存在: $CONFIG"
-    printf "${BOLD_CYAN}  📦 当前生效的模型配置${C}\n"
-    while IFS= read -r line; do
-        line="${line#"${line%%[![:space:]]*}"}"   # 去行首空白
-        [ -z "$line" ] && continue
-        [[ "$line" == \[* ]] && break
-        echo "  $line"
-    done < "$CONFIG"
-}
-
-repeat_char() {
-    local text
-    printf -v text '%*s' "$2" ''
-    printf '%s' "${text// /$1}"
-}
-
-display_width() {
-    local value="$1" char code i width=0
-    for ((i = 0; i < ${#value}; i++)); do
-        char="${value:i:1}"
-        printf -v code '%d' "'$char"
-        if (( (code >= 0x1100 && code <= 0x115f) ||
-              (code >= 0x2e80 && code <= 0xa4cf) ||
-              (code >= 0xac00 && code <= 0xd7a3) ||
-              (code >= 0xf900 && code <= 0xfaff) ||
-              (code >= 0xfe30 && code <= 0xfe6f) ||
-              (code >= 0xff01 && code <= 0xff60) ||
-              (code >= 0xffe0 && code <= 0xffe6) ||
-              (code >= 0x2600 && code <= 0x27bf) ||
-              (code >= 0x1f000) )); then
-            width=$((width + 2))
-        else
-            width=$((width + 1))
-        fi
-    done
-    printf '%s' "$width"
-}
-
-table_rule() {
-    local left="$1" join="$2" right="$3" width first=true
-    shift 3
-    printf "${DGRAY}  %s" "$left"
-    for width in "$@"; do
-        [ "$first" = true ] || printf '%s' "$join"
-        repeat_char '─' "$width"
-        first=false
-    done
-    printf "%s${C}\n" "$right"
-}
-
-table_cell() {
-    local value="$1" width="$2" color="$3" value_width
-    value_width=$(display_width "$value")
-    if [ "$value_width" -gt "$width" ]; then
-        local limit=$((width - 3))
-        while [ "$(display_width "$value")" -gt "$limit" ]; do
-            value="${value:0:${#value}-1}"
-        done
-        value+='...'
-        value_width=$(display_width "$value")
-    fi
-    printf "${DGRAY}│${C}${color}%s${C}" "$value"
-    printf "${DGRAY}%*s${C}" "$((width - value_width))" ''
-}
-
-table_cell_center() {
-    local value="$1" width="$2" color="$3" value_width left right
-    value_width=$(display_width "$value")
-    left=$(((width - value_width) / 2))
-    right=$((width - value_width - left))
-    printf "${DGRAY}│%*s${C}${color}%s${C}${DGRAY}%*s${C}" "$left" '' "$value" "$right" ''
-}
-
-# === 工具：供应商图标（以 model_provider 判别；为空时按模型名前缀回退） ===
-provider_icon() {
-    local provider="$1" model="$2"
-    case "$provider" in
-        [Dd]eepseek*) printf "🐳 " ;;
-        [Oo]penai*)   printf "💠 " ;;
-        *)
-            case "$model" in
-                [Dd]eepseek*) printf "🐳 " ;;
-                [Gg]pt*)      printf "💠 " ;;
-                *)            printf "" ;;
-            esac
-            ;;
-    esac
-}
-
-# === 工具：掩码输入（逐字符显示 •，支持退格，回车结束） ===
-# 结果写入全局 SECRET_INPUT（read 必须在父 shell 执行，命令替换会吞 stdin 缓冲）
-SECRET_INPUT=""
-read_secret() {
-    local prompt="$1" input="" ch
-    printf "%s" "$prompt"
-    while IFS= read -r -s -n1 ch; do
-        case "$ch" in
-            $'\x7f'|$'\b')
-                [ -n "$input" ] || continue
-                input="${input%?}"
-                printf '\b \b'
-                ;;
-            $'\n'|$'\r'|'')
-                break
-                ;;
-            *)
-                input+="$ch"
-                printf '•'
-                ;;
-        esac
-    done
-    printf '\n'
-    SECRET_INPUT="$input"
-}
-
-table_row() {
-    local num="$1" status="$2" name="$3" model="$4" provider="$5" color="$6"
-    printf '  '
-    table_cell_center "$num" 4 "$color"
-    table_cell_center "$status" 6 "$color"
-    table_cell "$name" 16 "$color"
-    table_cell "$model" 26 "$color"
-    table_cell "$provider" 14 "$color"
-    printf "${DGRAY}│${C}\n"
-}
-
-cmd_list() {
-    mkdir -p "$MODELS_DIR"
-    local files=("$MODELS_DIR"/*.toml)
-    [ -f "${files[0]:-}" ] || {
-        warn "  ❓ 模板目录为空: $MODELS_DIR"
-        printf "${DGRAY}     手动新建 .toml 模板文件后回车刷新${C}\n\n"
-        return
+# === 核心：从单个模板里提取 (model, model_provider, token 指纹) ===
+# 返回 hashtable；任一字段缺失时该字段为 $null。
+function Get-TemplateFingerprint {
+    param([Parameter(Mandatory)] [string]$Path)
+    $content = [System.IO.File]::ReadAllText($Path, [System.Text.UTF8Encoding]::new($false))
+    $m = $null; $p = $null; $tok = $null
+    foreach ($line in ($content -split [char]10)) {
+        $t = $line.Trim()
+        if ($t.StartsWith('#')) { continue }
+        if ($t -match '^\s*model\s*=\s*"(.*)"\s*$')                   { $m   = $Matches[1] }
+        if ($t -match '^\s*model_provider\s*=\s*"(.*)"\s*$')         { $p   = $Matches[1] }
+        if ($t -match '^\s*experimental_bearer_token\s*=\s*"(.*)"\s*$') { $tok = $Matches[1] }
     }
-
-    local cur_model cur_provider
-    cur_model=$(get_field "$CONFIG" model)
-    cur_provider=$(get_field "$CONFIG" model_provider)
-
-    printf "${BOLD_CYAN}  🔍 模型配置${C}\n"
-    table_rule '╭' '┬' '╮' 4 6 16 26 14
-    table_row '编号' '状态' '名称' '模型' '供应商' "$BOLD_CYAN"
-    table_rule '├' '┼' '┤' 4 6 16 26 14
-
-    local i=0 f name model provider status color
-    for f in "$MODELS_DIR"/*.toml; do
-        [ -f "$f" ] || continue
-        i=$((i+1))
-        name=$(basename "$f" .toml)
-        model=$(get_field "$f" model)
-        provider=$(get_field "$f" model_provider)
-        status=''
-        color="$C"
-        if [ "$model" = "$cur_model" ] && [ "$provider" = "$cur_provider" ]; then
-            status='✅'
-            color="$BOLD_GREEN"
-        fi
-        table_row "$i" "$status" "$name" "${model:--}" "$(provider_icon "$provider" "$model")${provider:--}" "$color"
-    done
-    table_rule '╰' '┴' '╯' 4 6 16 26 14
-}
-
-cmd_use() {
-    local name="$1"
-    [ -n "$name" ] || fail "use 需要指定模型名（例: codex-switch use deepseek）"
-    local tpl="$MODELS_DIR/$name.toml"
-    [ -f "$tpl" ] || fail "模板不存在: $tpl"
-    [ -f "$CONFIG" ] || fail "config 不存在: $CONFIG"
-
-    # 1. 切出：保存源模型最新状态
-    local src
-    src=$(resolve_active)
-    if [ -n "$src" ]; then
-        mkdir -p "$STATE_DIR"
-        cp "$CONFIG" "$STATE_DIR/$src.toml"
-        printf "${DGRAY}  💾 已保存状态：%s${C}\n" "$src"
-        save_model_auth "$src"
-    else
-        warn "  当前配置未匹配模板，未保存状态"
-    fi
-    [ "$src" = "$name" ] && { say "  当前已是 $name，无需切换"; return; }
-
-    # 2. 目标内容：状态优先，无状态用模板播种
-    local content="$tpl" mode="模板初始化"
-    [ -f "$STATE_DIR/$name.toml" ] && { content="$STATE_DIR/$name.toml"; mode="状态恢复"; }
-
-    # 3. 原子写入
-    local tmp="$CONFIG.tmp"
-    cp "$content" "$tmp"
-    [ -s "$tmp" ] || fail "原子写校验失败：临时文件为空"
-    mv "$tmp" "$CONFIG"
-
-    # 4. 同步 auth.json（内容永不打印；无记录则清空防凭据串用）
-    local auth_src
-    auth_src="$(get_switch_auth "$name")"
-    if [ -n "$auth_src" ]; then
-        cp "$auth_src" "$AUTH_FILE.tmp"
-        [ -s "$AUTH_FILE.tmp" ] || fail "原子写校验失败：auth 临时文件为空"
-        mv "$AUTH_FILE.tmp" "$AUTH_FILE"
-        printf "${GREEN}  🔑 auth.json 已同步（%s）${C}\n" "$name"
-    elif [ -f "$AUTH_FILE" ]; then
-        rm -f "$AUTH_FILE"
-        printf "${YELLOW}  🔑 %s 无 auth 记录，已清空 auth.json（防凭据串用）${C}\n" "$name"
-    else
-        printf "${DGRAY}  🔑 %s 无 auth 记录${C}\n" "$name"
-    fi
-
-    # 5. 输出（掩码密钥）
-    local lines
-    lines=$(wc -l < "$CONFIG")
-    printf "${GREEN}  ✅ 已切换至 %s${C}\n" "$name"
-    printf "${DGRAY}  来源：%s · %s 行${C}\n\n" "$mode" "$lines"
-    printf "${BOLD_CYAN}  📋 当前配置${C}\n"
-    local n=0
-    while IFS= read -r line && [ "$n" -lt 15 ]; do
-        n=$((n+1))
-        [ -z "$line" ] && continue
-        [[ "$line" == \[* ]] && break
-        echo "  $(mask_line "$line")"
-    done < "$CONFIG"
-    printf "${DGRAY}\n  ℹ️ 重启 Codex 后生效${C}\n"
-}
-
-cmd_update() {
-    UPDATED=false
-    printf "${DGRAY}  🔎 检查更新 · 当前 v%s${C}\n" "$VERSION"
-    local json url source_version
-    source_version=$(curl -fsSL "${VERSION_URL}?nocache=$(date +%s)" | tr -d '[:space:]') || fail "无法获取 VERSION（网络或 GitHub 限流）"
-    [[ "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "VERSION 格式无效: $source_version"
-    if ! ver_gt "$source_version" "$VERSION"; then
-        printf "${GREEN}  ✅ 已是最新版本 v%s${C}\n" "$VERSION"; return
-    fi
-    printf "${YELLOW}  🚀 发现新版本 · v%s${C}\n" "$source_version"
-    json=$(curl -fsSL -H 'User-Agent: codex-switch' "$API_URL") || fail "无法获取最新版本（网络或 GitHub 限流）"
-    url=$(printf '%s' "$json" | { grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*codex-switch-linux\.zip"' || true; } | head -n1 | sed 's/.*"\(http[^"]*\)".*/\1/')
-    [ -n "$url" ] || fail "找不到资产 $ASSET_NAME"
-
-    local tmp; tmp=$(mktemp -d)
-    printf "${DGRAY}  ⬇️ 正在下载更新${C}\n"
-    curl -fsSL -o "$tmp/$ASSET_NAME" "$url" || fail "下载失败"
-    unzip -qo "$tmp/$ASSET_NAME" -d "$tmp/x" || fail "解压失败"
-    local new="$tmp/x/codex-switch"
-    [ -f "$new" ] || fail "包内缺少 codex-switch"
-    bash -n "$new" || fail "新版本语法校验失败"
-    local package_version
-    package_version=$(sed -n 's/^VERSION="\([^"]*\)".*/\1/p' "$new")
-    [ "$package_version" = "$source_version" ] || fail "下载资产版本 v$package_version 与 VERSION v$source_version 不一致"
-
-    local self
-    self="$(readlink -f "$0")"
-    cp "$new" "$self.tmp"
-    chmod +x "$self.tmp"
-    mv "$self.tmp" "$self"
-    rm -rf "$tmp"
-    UPDATED=true
-    printf "${GREEN}  ✅ 已升级至 v%s${C}\n" "$source_version"
-}
-
-cmd_doctor() {
-    printf "${BOLD_CYAN}  🩺 codex-switch v%s 体检${C}\n" "$VERSION"
-    local ok=0 bad=0
-    check() {
-        local desc="$1"; shift
-        if "$@"; then ok=$((ok+1)); printf "${GREEN}  ✅ %s${C}\n" "$desc"; else bad=$((bad+1)); printf "${RED}  ❌ %s${C}\n" "$desc"; fi
+    $fp = $null
+    if ($null -ne $tok -and $tok.Length -ge 12) {
+        $fp = $tok.Substring(0, 6) + '|' + $tok.Substring($tok.Length - 6)
+    } elseif ($null -ne $tok) {
+        # 短 token 直接整串对比，避免前 6/后 6 重叠/越界
+        $fp = $tok
     }
-    check "bash 原生实现（无 pwsh 依赖）" true
-    check "数据目录: $CODEX_HOME" test -d "$CODEX_HOME"
-    check "config.toml 存在" test -f "$CONFIG"
-    check "模板目录 models/" test -d "$MODELS_DIR"
-    check "状态目录 model-states/" test -d "$STATE_DIR"
-    check "curl 可用" command -v curl
-    check "unzip 可用" command -v unzip
-    echo "  通过 $ok / $((ok+bad))"
+    return @{ Model = $m; Provider = $p; TokenFingerprint = $fp }
 }
 
-show_help() {
-    echo "用法: codex-switch [use <name>] | [list] | [current] | [update] | [doctor] | [help]"
-    echo "      菜单内: o 打开模板目录，u 检查并升级"
-    echo "      首次运行（模板目录为空）自动进入初始化向导"
+# === 工具：计算字符串的终端显示宽度（CJK/emoji 安全）===
+# ASCII = 1 字符；非 ASCII = 2 字符；零宽字符 = 0 字符
+function Get-DisplayWidth {
+    param([string]$str)
+    if ([string]::IsNullOrEmpty($str)) { return 0 }
+    $width = 0
+    $chars = $str.ToCharArray()
+    $i = 0
+    while ($i -lt $chars.Length) {
+        $cp = [int]$chars[$i]
+        # 代理项对: emoji 等辅助平面字符，宽度 2
+        if ($cp -ge 0xD800 -and $cp -le 0xDBFF -and $i + 1 -lt $chars.Length) {
+            $low = [int]$chars[$i + 1]
+            if ($low -ge 0xDC00 -and $low -le 0xDFFF) {
+                $width += 2; $i += 2; continue
+            }
+        }
+        # 零宽字符: 变体选择符、ZWSP/ZWNJ/ZWJ、Word Joiner
+        if (($cp -ge 0xFE00 -and $cp -le 0xFE0F) -or ($cp -ge 0x200B -and $cp -le 0x200D) -or $cp -eq 0x2060) { $i++; continue }
+        # CJK 字符范围 (中文/日文/韩文/全角符号): 宽度 2
+        if (($cp -ge 0x1100 -and $cp -le 0x115F) -or
+            ($cp -ge 0x2E80 -and $cp -le 0x303E) -or
+            ($cp -ge 0x3041 -and $cp -le 0x33FF) -or
+            ($cp -ge 0x3400 -and $cp -le 0x4DBF) -or
+            ($cp -ge 0x4E00 -and $cp -le 0x9FFF) -or
+            ($cp -ge 0xA000 -and $cp -le 0xA4CF) -or
+            ($cp -ge 0xAC00 -and $cp -le 0xD7A3) -or
+            ($cp -ge 0xF900 -and $cp -le 0xFAFF) -or
+            ($cp -ge 0xFE30 -and $cp -le 0xFE4F) -or
+            ($cp -ge 0xFF00 -and $cp -le 0xFF60) -or
+            ($cp -ge 0xFFE0 -and $cp -le 0xFFE6)) {
+            $width += 2
+        }
+        # 制表符/框线字符（Box Drawing U+2500-U+257F）：终端始终宽度 1
+        elseif ($cp -ge 0x2500 -and $cp -le 0x257F) { $width += 1 }
+        # Em dash（U+2014）：East Asian Ambiguous 标点，PowerShell/Windows Terminal 默认按 1 列渲染
+        # （UAX#11：上下文不明时 Ambiguous 默认 narrow）。若算 2，含破折号的标题框右框会偏左 1 格
+        elseif ($cp -eq 0x2014) { $width += 1 }
+        # 其他非零宽字符：ASCII = 宽度 1，非 ASCII（含 emoji ✅🔑 等）= 宽度 2
+        else { $width += if ($cp -gt 127) { 2 } else { 1 } }
+        $i++
+    }
+    return $width
+}
+
+# === 核心：从 config.toml 提取当前生效的 (model, model_provider, token 指纹) ===
+function Get-CurrentFingerprint {
+    param([Parameter(Mandatory)] [string]$ConfigPath)
+    $content = [System.IO.File]::ReadAllText($ConfigPath, [System.Text.UTF8Encoding]::new($false))
+    $m = $null; $p = $null; $tok = $null
+    foreach ($line in ($content -split [char]10)) {
+        $t = $line.Trim()
+        if ($t.StartsWith('#')) { continue }
+        if ($t -match '^\s*model\s*=\s*"(.*)"\s*$')                   { $m   = $Matches[1] }
+        if ($t -match '^\s*model_provider\s*=\s*"(.*)"\s*$')         { $p   = $Matches[1] }
+        if ($t -match '^\s*experimental_bearer_token\s*=\s*"(.*)"\s*$') { $tok = $Matches[1] }
+    }
+    $fp = $null
+    if ($null -ne $tok -and $tok.Length -ge 12) {
+        $fp = $tok.Substring(0, 6) + '|' + $tok.Substring($tok.Length - 6)
+    } elseif ($null -ne $tok) {
+        $fp = $tok
+    }
+    return @{ Model = $m; Provider = $p; TokenFingerprint = $fp }
+}
+
+# === 核心：标记每个模板是 active/none（与 Linux 分支一致：model+provider 匹配即激活） ===
+# 返回: 路径 -> 'active' | 'none'
+function Resolve-ActiveMarkers {
+    param(
+        [Parameter(Mandatory)] [string[]]$Files,
+        [Parameter(Mandatory)] [string]$ConfigPath
+    )
+    $current = Get-CurrentFingerprint -ConfigPath $ConfigPath
+    $markers = @{}
+    foreach ($f in $Files) {
+        $fp = Get-TemplateFingerprint -Path $f
+        if ($null -ne $fp.Model -and $fp.Model -eq $current.Model -and $fp.Provider -eq $current.Provider) {
+            $markers[$f] = 'active'
+        } else {
+            $markers[$f] = 'none'
+        }
+    }
+    return $markers
+}
+
+# === 核心：找出当前 config.toml 对应哪个模板（源模型名） ===
+# 返回: 模板名（不带 .toml），匹配不到返回 $null
+function Resolve-ActiveName {
+    param(
+        [Parameter(Mandatory)] [string[]]$Files,
+        [Parameter(Mandatory)] [string]$ConfigPath
+    )
+    $markers = Resolve-ActiveMarkers -Files $Files -ConfigPath $ConfigPath
+    foreach ($f in $Files) {
+        if ($markers[$f] -eq 'active') {
+            return [System.IO.Path]::GetFileNameWithoutExtension($f)
+        }
+    }
+    return $null
+}
+
+# === 核心：切出时把当前 config 完整保存为 <name> 的最新状态 ===
+function Save-ModelState {
+    param(
+        [Parameter(Mandatory)] [string]$Name,
+        [Parameter(Mandatory)] [string]$ConfigPath,
+        [Parameter(Mandatory)] [string]$StateDir
+    )
+    if (-not [System.IO.Directory]::Exists($StateDir)) {
+        [System.IO.Directory]::CreateDirectory($StateDir) | Out-Null
+    }
+    [System.IO.File]::Copy($ConfigPath, (Join-Path $StateDir "$Name.toml"), $true)
+}
+
+# === 核心：切入时取目标内容 — 优先该模型的最新状态，首次才用模板播种 ===
+# 返回: @{ Source = 'state' | 'template'; Content = [string] }
+function Get-SwitchContent {
+    param(
+        [Parameter(Mandatory)] [string]$Name,
+        [Parameter(Mandatory)] [string]$ModelsDir,
+        [Parameter(Mandatory)] [string]$StateDir
+    )
+    $statePath = Join-Path $StateDir "$Name.toml"
+    if ([System.IO.File]::Exists($statePath)) {
+        return @{
+            Source  = 'state'
+            Content = [System.IO.File]::ReadAllText($statePath, [System.Text.UTF8Encoding]::new($false))
+        }
+    }
+    $tplPath = Join-Path $ModelsDir "$Name.toml"
+    if (-not [System.IO.File]::Exists($tplPath)) {
+        throw "找不到 $Name 的状态文件或模板: $tplPath"
+    }
+    return @{
+        Source  = 'template'
+        Content = [System.IO.File]::ReadAllText($tplPath, [System.Text.UTF8Encoding]::new($false))
+    }
+}
+
+# === 核心：切出时保存/清空模型 auth 状态（auth 存在→复制；不存在→删旧状态）===
+function Save-ModelAuth {
+    param(
+        [Parameter(Mandatory)] [string]$Name,
+        [Parameter(Mandatory)] [string]$AuthPath,
+        [Parameter(Mandatory)] [string]$StateDir
+    )
+    if (-not [System.IO.Directory]::Exists($StateDir)) {
+        [System.IO.Directory]::CreateDirectory($StateDir) | Out-Null
+    }
+    $statePath = Join-Path $StateDir "$Name.auth.json"
+    if ([System.IO.File]::Exists($AuthPath)) {
+        [System.IO.File]::Copy($AuthPath, $statePath, $true)
+    } elseif ([System.IO.File]::Exists($statePath)) {
+        [System.IO.File]::Delete($statePath)
+    }
+}
+
+# === 核心：切入时取目标 auth 源 — 状态优先，首次才用模板；无托管 Source 为 $null ===
+function Get-SwitchAuth {
+    param(
+        [Parameter(Mandatory)] [string]$Name,
+        [Parameter(Mandatory)] [string]$ModelsDir,
+        [Parameter(Mandatory)] [string]$StateDir
+    )
+    $statePath = Join-Path $StateDir "$Name.auth.json"
+    if ([System.IO.File]::Exists($statePath)) {
+        return @{
+            Source  = 'state'
+            Content = [System.IO.File]::ReadAllText($statePath, [System.Text.UTF8Encoding]::new($false))
+        }
+    }
+    $tplPath = Join-Path $ModelsDir "$Name.auth.json"
+    if ([System.IO.File]::Exists($tplPath)) {
+        return @{
+            Source  = 'template'
+            Content = [System.IO.File]::ReadAllText($tplPath, [System.Text.UTF8Encoding]::new($false))
+        }
+    }
+    return @{ Source = $null; Content = $null }
 }
 
 # === 内置模板：🐳 DeepSeek-V4-Flash ===
-TEMPLATE_DEEPSEEK=$(cat <<'TEMPLATE_EOF'
+$script:TemplateDeepseek = @'
 # ============================================================
 # 🐳 DeepSeek-V4-Flash 模板
 # 官方接入文档: https://api-docs.deepseek.com/zh-cn/quick_start/agent_integrations/codex
@@ -431,11 +257,10 @@ name = "deepseek"
 base_url = "https://api.deepseek.com"
 wire_api = "responses"
 experimental_bearer_token = "__API_KEY__"
-TEMPLATE_EOF
-)
+'@
 
 # === 内置模板：🐳 DeepSeek-V4-Pro ===
-TEMPLATE_DEEPSEEK_PRO=$(cat <<'TEMPLATE_EOF'
+$script:TemplateDeepseekPro = @'
 # ============================================================
 # 🐳 DeepSeek-V4-Pro 模板
 # 官方接入文档: https://api-docs.deepseek.com/zh-cn/quick_start/agent_integrations/codex
@@ -455,13 +280,11 @@ name = "deepseek"
 base_url = "https://api.deepseek.com"
 wire_api = "responses"
 experimental_bearer_token = "__API_KEY__"
-TEMPLATE_EOF
-)
+'@
 
-# === 内置模型目录 models.json（Codex 识别 V4 模型能力必需） ===
-# DeepSeek 官方完整版（V4-Flash/V4-Pro，含 instructions_template/base_instructions）
+# === 内置模型目录 models.json（DeepSeek 官方完整版，含 instructions_template/base_instructions）===
 # 来源: https://api-docs.deepseek.com/zh-cn/quick_start/agent_integrations/codex
-TEMPLATE_MODELS_JSON=$(cat <<'JSON_EOF'
+$script:TemplateModelsJson = @'
 {
   "models": [
     {
@@ -600,239 +423,817 @@ TEMPLATE_MODELS_JSON=$(cat <<'JSON_EOF'
     }
   ]
 }
-JSON_EOF
-)
+'@
 
-# === 向导：检测 codex CLI（未安装则按系统输出安装命令，可代执行；返回 1 退出向导） ===
-wizard_check_codex() {
-    command -v codex >/dev/null 2>&1 && return 0
-    printf "${YELLOW}  ⚠️ 未检测到 codex CLI，首次使用需要先安装${C}\n\n"
-    printf "  ${GREEN}安装命令（官方独立安装器，免 Node.js）：${C}\n"
-    printf "    %s\n" "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
-    local os
-    os="$(uname -s)"
-    case "$os" in
-        Darwin)
-            command -v brew >/dev/null 2>&1 && printf "  ${GREEN}或用 Homebrew：${C}%s\n" "brew install --cask codex"
-            ;;
-        Linux)
-            uname -r | grep -qi microsoft && printf "  ${DGRAY}（检测到 WSL 环境，同样适用）${C}\n"
-            ;;
-    esac
-    printf "\n"
-    local ans
-    printf "  是否现在帮你执行安装命令？[Y/n] › "
-    read -r ans || { printf "\n"; ans=n; }
-    case "$ans" in
-        y|Y|"")
-            printf "${DGRAY}  ⬇️ 正在安装 codex，请稍候…${C}\n"
-            if sh -c 'curl -fsSL https://chatgpt.com/codex/install.sh | sh'; then
-                if command -v codex >/dev/null 2>&1 || [ -x "$HOME/.local/bin/codex" ]; then
-                    export PATH="$HOME/.local/bin:$PATH"
-                    printf "${GREEN}  ✅ codex 安装成功：%s${C}\n" "$(command -v codex)"
-                    return 0
-                fi
-                printf "${YELLOW}  ⚠️ 安装完成但未找到 codex 命令，请检查 PATH 后重新运行${C}\n"
-                return 1
-            fi
-            printf "${YELLOW}  ⚠️ 安装失败（网络或权限问题），请手动执行上面的命令${C}\n"
-            return 1
-            ;;
-        *)
-            printf "${DGRAY}  请手动执行上面的命令，安装完成后重新运行 codex-switch${C}\n"
-            return 1
-            ;;
-    esac
+# === 子命令 ===
+
+function Invoke-Current {
+    $content = [System.IO.File]::ReadAllText($script:ConfigPath, [System.Text.UTF8Encoding]::new($false))
+    $lines = $content -split [char]10
+    Write-ColorOutput "📦 当前生效的模型配置:" Cyan
+    Write-ColorOutput ("=" * 56) DarkGray
+    foreach ($line in $lines) {
+        $trimmed = $line.Trim()
+        if ($trimmed -eq '') { continue }
+        if ($trimmed -match '^\[') { break }  # 到第一个 [section] 就停
+        Write-ColorOutput "  $trimmed" White
+    }
 }
 
-# === 向导：检查 codex 版本（DeepSeek V4 要求 ≥ 0.144.0） ===
-wizard_check_version() {
-    local ver ans
-    ver=$(codex --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
-    [ -n "$ver" ] || return 0
-    if ver_gt "$DEEPSEEK_MIN_CODEX" "$ver"; then
-        printf "${YELLOW}  ⚠️ codex v%s 低于 DeepSeek V4 要求的最低版本 %s${C}\n" "$ver" "$DEEPSEEK_MIN_CODEX"
-        printf "  ${GREEN}升级命令：${C}%s\n" "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
-        read -r -p "  回车继续，q 退出升级 › " ans || true
-        if [ "$ans" = q ] || [ "$ans" = Q ]; then
-            return 1
-        fi
-    fi
-    return 0
+function Invoke-List {
+    if (-not [System.IO.Directory]::Exists($script:ModelsDir)) {
+        [System.IO.Directory]::CreateDirectory($script:ModelsDir) | Out-Null
+    }
+    $files = [System.IO.Directory]::GetFiles($script:ModelsDir, '*.toml')
+
+    if ($files.Count -eq 0) {
+        Write-ColorOutput "❓ 模板目录为空: $($script:ModelsDir)" Yellow
+        return
+    }
+
+    # 读当前 model + provider
+    $currentContent = [System.IO.File]::ReadAllText($script:ConfigPath, [System.Text.UTF8Encoding]::new($false))
+    $currentModel = ''
+    $currentProvider = ''
+    foreach ($line in ($currentContent -split [char]10)) {
+        $t = $line.Trim()
+        if ($t -match '^model\s*=\s*(.*)$')               { $currentModel = $Matches[1].Trim().Trim('"') }
+        if ($t -match '^model_provider\s*=\s*(.*)$')      { $currentProvider = $Matches[1].Trim().Trim('"') }
+        if ($currentModel -ne '' -and $currentProvider -ne '') { break }
+    }
+
+    # 解析每个模板的数据 + 标记
+    $markers = Resolve-ActiveMarkers -Files $files -ConfigPath $script:ConfigPath
+    $rows = [System.Collections.Generic.List[hashtable]]::new()
+    for ($i = 0; $i -lt $files.Count; $i++) {
+        $name = [System.IO.Path]::GetFileNameWithoutExtension($files[$i])
+        $tplContent = [System.IO.File]::ReadAllText($files[$i], [System.Text.UTF8Encoding]::new($false))
+        $tplModel = ''; $tplProvider = ''
+        foreach ($line in ($tplContent -split [char]10)) {
+            $t = $line.Trim()
+            if ($t -match '^model\s*=\s*(.*)$')            { $tplModel = $Matches[1].Trim().Trim('"') }
+            if ($t -match '^model_provider\s*=\s*(.*)$')    { $tplProvider = $Matches[1].Trim().Trim('"') }
+        }
+        $marker = switch ($markers[$files[$i]]) {
+            'active' { '✅' }
+            default  { ''  }
+        }
+        $rows.Add(@{
+            Num     = "$(($i + 1))"
+            Status  = $marker
+            Name    = $name
+            Model   = $tplModel
+            Provider = "$(Get-ProviderIcon $tplProvider $tplModel)$tplProvider"
+        })
+    }
+
+    # ── 表格渲染（与 Linux 分支一致：固定列宽、编号/状态居中、激活行粗体绿）──
+    $headers = @('编号', '状态', '名称', '模型', '供应商')
+    $keys    = @('Num',  'Status', 'Name', 'Model', 'Provider')
+    $widths  = @(4, 6, 16, 26, 14)
+    $colCount = $headers.Count
+    $esc = [char]27
+    $gray     = "$esc[90m"
+    $reset    = "$esc[0m"
+    $boldCyan = "$esc[1;38;2;63;174;194m"
+    $boldGreen = "$esc[1;32m"
+
+    # 水平线: ┌─┬─┐ ├─┼─┤ └─┴─┘
+    function _HLine($L, $J, $R) {
+        $line = $L
+        for ($i = 0; $i -lt $colCount; $i++) {
+            if ($i -gt 0) { $line += $J }
+            $line += ('─' * $widths[$i])
+        }
+        return $line + $R
+    }
+    # 数据行: 边框灰, 激活行内容粗体绿/普通行无色（与 Linux 一致）
+    function Write-DataRow($Values, $Bold) {
+        $valColor = if ($Bold) { $boldGreen } else { '' }
+        $sb = "$gray│$valColor"
+        for ($i = 0; $i -lt $colCount; $i++) {
+            $val = [string]$Values[$i]
+            $pad = $widths[$i] - (Get-DisplayWidth $val)
+            if ($pad -lt 0) { $pad = 0 }
+            if ($i -eq 0 -or $i -eq 1) {
+                $leftPad  = [int][Math]::Floor($pad / 2)
+                $rightPad = $pad - $leftPad
+                if ($rightPad -lt 0) { $rightPad = 0 }
+                $sb += ' ' * $leftPad + $val + ' ' * $rightPad
+            } else {
+                $sb += $val + ' ' * $pad
+            }
+            if ($i -lt $colCount - 1) { $sb += "$reset$gray│$valColor" }
+        }
+        $sb += "$reset$gray│$reset"
+        Write-Host $sb
+    }
+    # 表头: 边框灰, 内容粗体青（与 Linux 一致）
+    function Write-HeadRow($Values) {
+        $sb = "$gray│$boldCyan"
+        for ($i = 0; $i -lt $colCount; $i++) {
+            $val = [string]$Values[$i]
+            $pad = $widths[$i] - (Get-DisplayWidth $val)
+            if ($pad -lt 0) { $pad = 0 }
+            if ($i -eq 0 -or $i -eq 1) {
+                $leftPad  = [int][Math]::Floor($pad / 2)
+                $rightPad = $pad - $leftPad
+                if ($rightPad -lt 0) { $rightPad = 0 }
+                $sb += ' ' * $leftPad + $val + ' ' * $rightPad
+            } else {
+                $sb += $val + ' ' * $pad
+            }
+            if ($i -lt $colCount - 1) { $sb += "$reset$gray│$boldCyan" }
+        }
+        $sb += "$reset$gray│$reset"
+        Write-Host $sb
+    }
+
+    Write-Host "  $boldCyan🔍 模型配置$reset"
+    Write-Host "$gray$(_HLine '╭' '┬' '╮')$reset"
+    Write-HeadRow $headers
+    Write-Host "$gray$(_HLine '├' '┼' '┤')$reset"
+    foreach ($r in $rows) {
+        $vals = @(); foreach ($k in $keys) { $vals += $r[$k] }
+        Write-DataRow $vals ($r.Status -eq '✅')
+    }
+    Write-Host "$gray$(_HLine '╰' '┴' '╯')$reset"
+}
+
+# === 核心：切换 = 保存当前模型状态 + 恢复目标模型状态（首次用模板播种） ===
+function Invoke-Use {
+    param([Parameter(Mandatory)] [string]$Name)
+
+    # 1. 切出：找出当前 config 对应的源模型，把最新状态完整存下
+    $files = [System.IO.Directory]::GetFiles($script:ModelsDir, '*.toml')
+    $sourceName = Resolve-ActiveName -Files $files -ConfigPath $script:ConfigPath
+    if ($null -ne $sourceName) {
+        Save-ModelState -Name $sourceName -ConfigPath $script:ConfigPath -StateDir $script:StateDir
+        Write-ColorOutput "💾 已保存 $sourceName 的最新状态" DarkGray
+        Save-ModelAuth -Name $sourceName -AuthPath $script:AuthPath -StateDir $script:StateDir
+        if ([System.IO.File]::Exists($script:AuthPath)) {
+            Write-ColorOutput "🔑 已保存 $sourceName 的 auth 状态" DarkGray
+        }
+    } else {
+        Write-ColorOutput "⚠️ 当前 config 匹配不到任何模板，跳过状态保存" Yellow
+    }
+
+    # 2. 目标已激活：无需切换
+    if ($sourceName -eq $Name) {
+        Write-ColorOutput "✅ $Name 已是最新状态，无需切换" Green
+        return
+    }
+
+    # 3. 目标内容：优先恢复它的状态，首次才用模板播种
+    $switch = Get-SwitchContent -Name $Name -ModelsDir $script:ModelsDir -StateDir $script:StateDir
+
+    # 4. 原子写入：整个 config.toml 被目标内容覆盖
+    $newContent = ($switch.Content.TrimEnd()) + "`n"
+    $tmp = "$($script:ConfigPath).tmp"
+    try {
+        [System.IO.File]::WriteAllText($tmp, $newContent, [System.Text.UTF8Encoding]::new($false))
+        $verify = [System.IO.File]::ReadAllText($tmp, [System.Text.UTF8Encoding]::new($false))
+        if ([string]::IsNullOrWhiteSpace($verify)) {
+            throw "原子写校验失败：临时文件为空"
+        }
+        [System.IO.File]::Move($tmp, $script:ConfigPath, $true)
+    } catch {
+        if ([System.IO.File]::Exists($tmp)) { [System.IO.File]::Delete($tmp) }
+        throw
+    }
+
+    $mode = if ($switch.Source -eq 'state') { '状态恢复' } else { '模板初始化' }
+    $lineCount = ($newContent -split [char]10).Count
+    Write-ColorOutput "✅ 已切换到: $Name（$mode，$lineCount 行）" Green
+
+    # 5.5 同步 auth.json（内容永不打印；无记录则清空防凭据串用）
+    $auth = Get-SwitchAuth -Name $Name -ModelsDir $script:ModelsDir -StateDir $script:StateDir
+    if ($null -ne $auth.Source) {
+        $authTmp = "$($script:AuthPath).tmp"
+        try {
+            [System.IO.File]::WriteAllText($authTmp, ($auth.Content.TrimEnd()) + "`n", [System.Text.UTF8Encoding]::new($false))
+            $authVerify = [System.IO.File]::ReadAllText($authTmp, [System.Text.UTF8Encoding]::new($false))
+            if ([string]::IsNullOrWhiteSpace($authVerify)) {
+                throw "原子写校验失败：auth 临时文件为空"
+            }
+            [System.IO.File]::Move($authTmp, $script:AuthPath, $true)
+        } catch {
+            if ([System.IO.File]::Exists($authTmp)) { [System.IO.File]::Delete($authTmp) }
+            throw
+        }
+        Write-ColorOutput "🔑 auth.json 已同步（$Name）" Green
+    } elseif ([System.IO.File]::Exists($script:AuthPath)) {
+        [System.IO.File]::Delete($script:AuthPath)
+        Write-ColorOutput "🔑 $Name 无 auth 记录，已清空 auth.json（防凭据串用）" Yellow
+    } else {
+        Write-ColorOutput "🔑 $Name 无 auth 记录" DarkGray
+    }
+    foreach ($line in ($newContent -split [char]10)) {
+        $t = $line.Trim()
+        if ($t -eq '') { continue }
+        if ($t -match '(token|key|password|secret)\s*=\s*"(.+)"') {
+            $val = $Matches[2]
+            if ($val.Length -gt 14) {
+                $masked = $val.Substring(0, 6) + '****' + $val.Substring($val.Length - 6)
+                $t = $t -replace [regex]::Escape($val), $masked
+            }
+        }
+        Write-ColorOutput "   $t" White
+    }
+    Write-ColorOutput "⚠️  请重启 Codex 生效" Yellow
+}
+
+# === 工具：模板显示名（DeepSeek 系列带 🐳） ===
+function Get-ProviderIcon {
+    param([AllowNull()] [string]$Provider, [AllowNull()] [string]$Model)
+    if ($Provider -like 'deepseek*') { return '🐳 ' }
+    if ($Provider -like 'openai*') { return '💠 ' }
+    if ($Model -like 'deepseek*') { return '🐳 ' }
+    if ($Model -like 'gpt*') { return '💠 ' }
+    return ''
+}
+
+# === 向导：检测 codex CLI（未安装返回安装命令列表，已安装返回 $null） ===
+# Windows: 官方独立安装器 install.ps1；其他平台（pwsh on Linux/WSL）: 官方 install.sh
+function Get-CodexInstallHint {
+    if ($null -ne (Get-Command codex -ErrorAction SilentlyContinue)) { return $null }
+    if ($IsWindows) {
+        return @('powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"')
+    }
+    return @('curl -fsSL https://chatgpt.com/codex/install.sh | sh')
+}
+
+# === 向导：codex 版本检查（返回 $true 通过 / $false 过低 / $null 无法获取） ===
+function Test-CodexVersion {
+    if ($null -eq (Get-Command codex -ErrorAction SilentlyContinue)) { return $null }
+    $out = (& codex --version 2>$null) -join ' '
+    $m = [regex]::Match($out, '\d+\.\d+\.\d+')
+    if (-not $m.Success) { return $null }
+    if ((Compare-Version -A $m.Value -B $script:DeepseekMinCodex) -lt 0) { return $false }
+    return $true
+}
+
+# === 向导：掩码输入（交互终端逐字符显示 •；非交互/测试环境退回 Read-Host） ===
+function Read-Secret {
+    param([string]$Prompt = '')
+    if ([Console]::IsInputRedirected) {
+        return (Read-Host $Prompt)
+    }
+    Write-Host $Prompt -NoNewline
+    $sb = [System.Text.StringBuilder]::new()
+    while ($true) {
+        $ki = [Console]::ReadKey($true)
+        if ($ki.Key -eq [ConsoleKey]::Enter) { break }
+        if ($ki.Key -eq [ConsoleKey]::Backspace) {
+            if ($sb.Length -gt 0) {
+                [void]$sb.Remove($sb.Length - 1, 1)
+                Write-Host "`b `b" -NoNewline
+            }
+            continue
+        }
+        [void]$sb.Append($ki.KeyChar)
+        Write-Host '•' -NoNewline
+    }
+    Write-Host ''
+    return $sb.ToString()
+}
+
+# === 向导：写入内置模板（替换占位符；Windows 路径统一正斜杠，TOML 安全） ===
+function Write-TemplateFile {
+    param(
+        [Parameter(Mandatory)] [string]$Name,
+        [Parameter(Mandatory)] [string]$Content,
+        [Parameter(Mandatory)] [AllowEmptyString()] [string]$ApiKey,
+        [Parameter(Mandatory)] [string]$ModelsDir
+    )
+    if (-not [System.IO.Directory]::Exists($ModelsDir)) {
+        [System.IO.Directory]::CreateDirectory($ModelsDir) | Out-Null
+    }
+    $path = Join-Path $ModelsDir "$Name.toml"
+    $content = $Content.Replace('__MODELS_JSON__', $script:ModelsJson.Replace('\', '/'))
+    $content = $content.Replace('__API_KEY__', $ApiKey)
+    [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))
+    return $path
+}
+
+# === 向导：写入模型目录 models.json（官方完整版，UTF-8 无 BOM） ===
+function Write-ModelsJsonFile {
+    param([Parameter(Mandatory)] [string]$Path)
+    [System.IO.File]::WriteAllText($Path, $script:TemplateModelsJson, [System.Text.UTF8Encoding]::new($false))
+    return $Path
 }
 
 # === 向导：打开目录引导导入用户自己的模板 ===
-wizard_import_template() {
-    mkdir -p "$MODELS_DIR"
-    if command -v xdg-open >/dev/null 2>&1; then
-        xdg-open "$MODELS_DIR" >/dev/null 2>&1 || true
-        printf "  ${CYAN}已打开模板目录：${C}%s\n" "$MODELS_DIR"
-    else
-        printf "  ${CYAN}请打开模板目录：${C}%s\n" "$MODELS_DIR"
-    fi
-    printf "  ${DGRAY}把模板 .toml 文件放进去（如有凭据可放同名 .auth.json），然后回到这里按回车${C}\n"
-    local first=true ans
-    while [ -z "$(ls "$MODELS_DIR"/*.toml 2>/dev/null)" ]; do
-        if [ "$first" = true ]; then
-            read -r -p "  放入后按回车继续，q 取消 › " ans || { printf "\n"; return 1; }
-            first=false
-        else
-            read -r -p "  目录仍为空，放入后按回车，q 取消 › " ans || { printf "\n"; return 1; }
-        fi
-        if [ "$ans" = q ] || [ "$ans" = Q ]; then
-            printf "${DGRAY}  已取消导入${C}\n"
-            return 1
-        fi
-    done
-    printf "  ${GREEN}✅ 已检测到模板：${C}%s\n" "$(basename "$(ls "$MODELS_DIR"/*.toml 2>/dev/null | head -n1)")"
-    return 0
-}
-
-# === 向导：生成内置模板（替换占位符后写入） ===
-wizard_write_template() {
-    local name="$1" content="$2" key="$3" out
-    content="${content//__MODELS_JSON__/$MODELS_JSON}"
-    content="${content//__API_KEY__/$key}"
-    out="$MODELS_DIR/$name.toml"
-    printf '%s\n' "$content" > "$out"
-    printf "  ${GREEN}✅ 模板已创建：${C}%s\n" "$out"
-}
-
-# === 向导：写入模型目录 models.json ===
-wizard_write_models_json() {
-    printf '%s\n' "$TEMPLATE_MODELS_JSON" > "$MODELS_JSON"
-    printf "  ${GREEN}✅ 模型目录已写入：${C}%s\n" "$MODELS_JSON"
+function Invoke-ImportTemplate {
+    if (-not [System.IO.Directory]::Exists($script:ModelsDir)) {
+        [System.IO.Directory]::CreateDirectory($script:ModelsDir) | Out-Null
+    }
+    if ($IsWindows) {
+        Write-ColorOutput "📂 已打开: $($script:ModelsDir)" DarkGray
+        Start-Process explorer.exe $script:ModelsDir
+    } else {
+        Write-ColorOutput "请打开模板目录: $($script:ModelsDir)" DarkGray
+    }
+    Write-ColorOutput "把模板 .toml 文件放进去（如有凭据可放同名 .auth.json），然后回到这里按回车" DarkGray
+    $first = $true
+    while ((Get-ChildItem -Path $script:ModelsDir -Filter '*.toml' -ErrorAction SilentlyContinue).Count -eq 0) {
+        $prompt = if ($first) { '放入后按回车继续，q 取消' } else { '目录仍为空，放入后按回车，q 取消' }
+        $first = $false
+        $ans = Read-Host $prompt
+        if ($ans -eq 'q' -or $ans -eq 'Q') {
+            Write-ColorOutput "已取消导入" DarkGray
+            return $false
+        }
+    }
+    $firstTpl = Get-ChildItem -Path $script:ModelsDir -Filter '*.toml' | Select-Object -First 1
+    Write-ColorOutput "✅ 已检测到模板: $($firstTpl.Name)" Green
+    return $true
 }
 
 # === 向导：内置 🐳 DeepSeek 模板选择 + API Key 引导 ===
-wizard_builtin_template() {
-    printf "  ${GREEN}1)${C} 🐳 DeepSeek-V4-Flash — 默认模型，快速，适合日常编码\n"
-    printf "  ${GREEN}2)${C} 🐳 DeepSeek-V4-Pro — 深度推理，适合复杂任务\n"
-    local choice name content key ans
-    read -r -p "  选择 [1-2] › " choice || { printf "\n"; return 1; }
-    case "$choice" in
-        1) name="deepseek"     ; content="$TEMPLATE_DEEPSEEK" ;;
-        2) name="deepseek-pro" ; content="$TEMPLATE_DEEPSEEK_PRO" ;;
-        *) printf "${YELLOW}  无效选择，默认使用 DeepSeek-V4-Flash${C}\n"
-           name="deepseek"; content="$TEMPLATE_DEEPSEEK" ;;
-    esac
+function Invoke-BuiltinTemplate {
+    Write-ColorOutput "  1) 🐳 DeepSeek-V4-Flash — 默认模型，快速，适合日常编码" White
+    Write-ColorOutput "  2) 🐳 DeepSeek-V4-Pro — 深度推理，适合复杂任务" White
+    $choice = Read-Host '选择 [1-2]'
+    $name = 'deepseek'
+    $content = $script:TemplateDeepseek
+    switch ($choice) {
+        '1' { $name = 'deepseek'     ; $content = $script:TemplateDeepseek }
+        '2' { $name = 'deepseek-pro' ; $content = $script:TemplateDeepseekPro }
+        default { Write-ColorOutput "无效选择，默认使用 DeepSeek-V4-Flash" Yellow }
+    }
 
-    printf "\n  ${CYAN}🔑 DeepSeek API Key${C}\n"
-    printf "  ${DGRAY}在 platform.deepseek.com/api_keys 创建，可留空稍后手动填入模板${C}\n"
-    read_secret "  API Key › "
-    key="$SECRET_INPUT"
+    Write-ColorOutput "" White
+    Write-ColorOutput "🔑 DeepSeek API Key" Cyan
+    Write-ColorOutput "在 platform.deepseek.com/api_keys 创建，可留空稍后手动填入模板" DarkGray
+    $key = Read-Secret 'API Key: '
 
-    mkdir -p "$MODELS_DIR"
-    wizard_write_template "$name" "$content" "$key"
-    wizard_write_models_json
+    $path = Write-TemplateFile -Name $name -Content $content -ApiKey $key -ModelsDir $script:ModelsDir
+    Write-ColorOutput "✅ 模板已创建: $path" Green
+    $jsonPath = Write-ModelsJsonFile -Path $script:ModelsJson
+    Write-ColorOutput "✅ 模型目录已写入: $jsonPath" Green
 
-    if [ ! -f "$CONFIG" ]; then
-        printf "  ${DGRAY}未发现 config.toml，已直接初始化为该模板${C}\n"
-        cp "$MODELS_DIR/$name.toml" "$CONFIG"
-    else
-        read -r -p "  是否立即切换到该模板？[y/N] › " ans || true
-        if [ "$ans" = y ] || [ "$ans" = Y ]; then
-            cmd_use "$name" || true
-        fi
-    fi
-    return 0
+    if (-not [System.IO.File]::Exists($script:ConfigPath)) {
+        Write-ColorOutput "未发现 config.toml，已直接初始化为该模板" DarkGray
+        $tpl = [System.IO.File]::ReadAllText($path, [System.Text.UTF8Encoding]::new($false))
+        [System.IO.File]::WriteAllText($script:ConfigPath, $tpl, [System.Text.UTF8Encoding]::new($false))
+    } else {
+        $ans = Read-Host '是否立即切换到该模板？[y/N]'
+        if ($ans -eq 'y' -or $ans -eq 'Y') { Invoke-Use -Name $name }
+    }
+    return $true
 }
 
 # === 首次使用向导 ===
-cmd_first_run() {
-    printf "${BOLD_CYAN}  🚀 首次使用 · codex-switch 初始化向导${C}\n"
-    printf "${DGRAY}  引导完成 Codex 检查、模型模板与 API Key 配置${C}\n\n"
+function Invoke-FirstRun {
+    Write-ColorOutput "🚀 首次使用 · codex-swap 初始化向导" Cyan
+    Write-ColorOutput "  引导完成 Codex 检查、模型模板与 API Key 配置" DarkGray
+    Write-ColorOutput "" White
 
-    wizard_check_codex || return 1
-    wizard_check_version || return 1
+    # ① codex CLI 检查（未安装：输出官方安装命令，可代执行；不装则退出向导）
+    $hints = Get-CodexInstallHint
+    if ($null -ne $hints) {
+        Write-ColorOutput "⚠️ 未检测到 codex CLI，首次使用需要先安装" Yellow
+        Write-ColorOutput "" White
+        Write-ColorOutput "安装命令（官方独立安装器）：" Green
+        foreach ($h in $hints) { Write-ColorOutput "  $h" White }
+        Write-ColorOutput "" White
+        $ans = Read-Host '是否现在帮你执行安装命令？[Y/n]'
+        if ($ans -eq '' -or $ans -eq 'y' -or $ans -eq 'Y') {
+            Write-ColorOutput "⬇️  正在安装 codex，请稍候…" DarkGray
+            if ($IsWindows) {
+                & powershell.exe -NoProfile -ExecutionPolicy ByPass -Command 'irm https://chatgpt.com/codex/install.ps1 | iex' | Out-Null
+                $installOk = ($LASTEXITCODE -eq 0)
+                $localBin = Join-Path $env:USERPROFILE '.local\bin'
+            } else {
+                & sh -c 'curl -fsSL https://chatgpt.com/codex/install.sh | sh' | Out-Null
+                $installOk = ($LASTEXITCODE -eq 0)
+                $localBin = Join-Path $env:HOME '.local/bin'
+            }
+            if ($installOk) {
+                if ($IsWindows) { $env:PATH = "${localBin};$env:PATH" } else { $env:PATH = "${localBin}:$env:PATH" }
+                $codexCmd = Get-Command codex -ErrorAction SilentlyContinue
+                if ($null -ne $codexCmd) {
+                    Write-ColorOutput "✅ codex 安装成功：$($codexCmd.Source)" Green
+                    return $true
+                }
+                Write-ColorOutput "⚠️ 安装完成但未找到 codex 命令，请检查 PATH 后重新运行" Yellow
+                return $false
+            }
+            Write-ColorOutput "⚠️ 安装失败（网络或权限问题），请手动执行上面的命令" Yellow
+            return $false
+        }
+        Write-ColorOutput "请手动执行上面的命令，安装完成后重新运行 codex-swap" DarkGray
+        return $false
+    }
 
-    printf "  ${BOLD_CYAN}📦 模型配置来源${C}\n"
-    printf "  ${GREEN}1)${C} 我有模板 — 打开目录手动导入\n"
-    printf "  ${GREEN}2)${C} DeepSeek 官方接入配置 — 🐳\n"
-    printf "  ${DGRAY}q 退出向导${C}\n"
-    local choice
-    while true; do
-        read -r -p "  选择 [1-2] › " choice || { printf "\n"; return 1; }
-        case "$choice" in
-            1) wizard_import_template || { printf "${DGRAY}  跳过导入，进入菜单${C}\n"; } ; break ;;
-            2) wizard_builtin_template || return 1 ; break ;;
-            q|Q) printf "${DGRAY}  已退出向导${C}\n"; return 1 ;;
-            *) printf "${YELLOW}  无效选择，请重试${C}\n" ;;
-        esac
-    done
-    printf "\n  ${DGRAY}✨ 初始化完成${C}\n"
-    wait_for_menu "  按回车进入菜单，q 退出 › " || return 1
-    return 0
-}
+    # 版本检查（DeepSeek V4 要求 >= 0.144.0）
+    $verOk = Test-CodexVersion
+    if ($false -eq $verOk) {
+        Write-ColorOutput "⚠️ codex 版本低于 DeepSeek V4 要求的最低版本 $($script:DeepseekMinCodex)" Yellow
+        if ($IsWindows) {
+            Write-ColorOutput '升级命令: powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"' Green
+        } else {
+            Write-ColorOutput '升级命令: curl -fsSL https://chatgpt.com/codex/install.sh | sh' Green
+        }
+        $ans = Read-Host '回车继续，q 退出升级'
+        if ($ans -eq 'q' -or $ans -eq 'Q') { return $false }
+    }
 
-wait_for_menu() {
-    local choice
-    read -r -p "$1" choice || return 1
-    case "$choice" in q|Q) return 1 ;; esac
+    # ② 模板来源（两分支）
+    Write-ColorOutput "📦 模型配置来源" Cyan
+    Write-ColorOutput "  1) 我有模板 — 打开目录手动导入" White
+    Write-ColorOutput "  2) DeepSeek 官方接入配置 — 🐳" White
+    Write-ColorOutput "  q) 退出向导" DarkGray
+    while ($true) {
+        $choice = Read-Host '选择 [1-2]'
+        if ($choice -eq 'q' -or $choice -eq 'Q') { return $false }
+        switch ($choice) {
+            '1' {
+                if (-not (Invoke-ImportTemplate)) { Write-ColorOutput "跳过导入，进入菜单" DarkGray }
+                return $true
+            }
+            '2' { return (Invoke-BuiltinTemplate) }
+        }
+        Write-ColorOutput "无效选择，请重试" Yellow
+    }
+
+    Write-ColorOutput "" White
+    Write-ColorOutput "✨ 初始化完成" DarkGray
+    $ans = Read-Host '按回车进入菜单，q 退出'
+    if ($ans -eq 'q' -or $ans -eq 'Q') { return $false }
+    return $true
 }
 
 # === 交互式菜单 ===
-cmd_menu() {
+function Invoke-Menu {
     # 首次使用（模板目录为空）→ 初始化向导
-    if [ -z "$(ls "$MODELS_DIR"/*.toml 2>/dev/null)" ]; then
-        cmd_first_run || exit 0
-    fi
-    while true; do
-        clear 2>/dev/null || true
-        printf "${BOLD_CYAN}  💻 codex-switch v%s · 模型切换${C}\n" "$VERSION"
-        printf '%b  🔗 项目仓库: %s%b\n' "$CYAN" "$REPO_URL" "$C"
-        echo ""
-        cmd_list
-        local files=("$MODELS_DIR"/*.toml) prompt
-        if [ -f "${files[0]:-}" ]; then
-            printf "${DGRAY}  操作：U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出${C}\n"
-            echo ""
-            prompt="  选择模型 [1-${#files[@]}] › "
-        else
-            prompt="  操作：U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出 › "
-        fi
-        read -r -p "$prompt" choice || break
-        case "$choice" in
-            q|Q) return ;;
-            "" ) continue ;;
-            o|O) xdg-open "$MODELS_DIR" >/dev/null 2>&1 || echo "  手动打开: $MODELS_DIR"; continue ;;
-            u|U)
-                cmd_update
-                if [ "$UPDATED" = true ]; then
-                    wait_for_menu "  按回车重新加载菜单，q 退出 › " || return 0
-                    exec bash "$(readlink -f "$0")"
-                fi
-                wait_for_menu "  按回车返回菜单，q 退出 › " || return 0
-                continue
-                ;;
-        esac
-        if [[ "$choice" =~ ^[0-9]+$ ]]; then
-            local name
-            if [ -f "${files[0]:-}" ] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#files[@]}" ]; then
-                name=$(basename "${files[$((choice-1))]}" .toml)
-                cmd_use "$name" || true
-                wait_for_menu "  按回车返回菜单，q 退出 › " || return 0
-            else
-                warn "  ❌ 无效: $choice"
-                wait_for_menu "  按回车返回菜单，q 退出 › " || return 0
-            fi
-        else
-            warn "  ❌ 无效: $choice"
-            wait_for_menu "  按回车返回菜单，q 退出 › " || return 0
-        fi
-    done
+    if (-not [System.IO.Directory]::Exists($script:ModelsDir)) {
+        [System.IO.Directory]::CreateDirectory($script:ModelsDir) | Out-Null
+    }
+    $hasAny = (Get-ChildItem -Path $script:ModelsDir -Filter '*.toml' -ErrorAction SilentlyContinue).Count -gt 0
+    if (-not $hasAny) {
+        if (-not (Invoke-FirstRun)) { return }
+    }
+    while ($true) {
+        # 每次重绘菜单前清屏，避免终端内容无限累积
+        Clear-Host
+        $esc = [char]27
+        Write-Host "  $esc[1;38;2;63;174;194m💻 codex-swap v$($script:ScriptVersion) · 模型切换$esc[0m"
+        Write-Host "  $esc[38;2;63;174;194m🔗 项目仓库: $($script:RepoUrl)$esc[0m"
+        Write-ColorOutput "" White
+
+        # 读当前 model + provider（用于标 ✅）
+        $currentContent = [System.IO.File]::ReadAllText($script:ConfigPath, [System.Text.UTF8Encoding]::new($false))
+        $currentModel = ''
+        $currentProvider = ''
+        foreach ($line in ($currentContent -split [char]10)) {
+            $t = $line.Trim()
+            if ($t -match '^model\s*=\s*(.*)$')              { $currentModel = $Matches[1].Trim().Trim('"') }
+            if ($t -match '^model_provider\s*=\s*(.*)$')     { $currentProvider = $Matches[1].Trim().Trim('"') }
+            if ($currentModel -ne '' -and $currentProvider -ne '') { break }
+        }
+
+        $files = [System.IO.Directory]::GetFiles($script:ModelsDir, '*.toml')
+
+        if ($files.Count -eq 0) {
+            Write-ColorOutput "  ❓ 模板目录为空: $($script:ModelsDir)" Yellow
+            Write-ColorOutput "     手动新建 .toml 模板文件后回车刷新" DarkGray
+        } else {
+            $markers = Resolve-ActiveMarkers -Files $files -ConfigPath $script:ConfigPath
+            $rows = [System.Collections.Generic.List[hashtable]]::new()
+            for ($i = 0; $i -lt $files.Count; $i++) {
+                $name = [System.IO.Path]::GetFileNameWithoutExtension($files[$i])
+                $tplContent = [System.IO.File]::ReadAllText($files[$i], [System.Text.UTF8Encoding]::new($false))
+                $tplModel = ''; $tplProvider = ''
+                foreach ($line in ($tplContent -split [char]10)) {
+                    $t = $line.Trim()
+                    if ($t -match '^model\s*=\s*(.*)$')            { $tplModel = $Matches[1].Trim().Trim('"') }
+                    if ($t -match '^model_provider\s*=\s*(.*)$')    { $tplProvider = $Matches[1].Trim().Trim('"') }
+                }
+                $marker = switch ($markers[$files[$i]]) {
+                    'active' { '✅' }
+                    default  { ''  }
+                }
+                $rows.Add(@{
+                    Num      = "$(($i + 1))"
+                    Status   = $marker
+                    Name     = $name
+                    Model    = $tplModel
+                    Provider = "$(Get-ProviderIcon $tplProvider $tplModel)$tplProvider"
+                })
+            }
+
+            # 表格渲染（与 Linux 分支一致：固定列宽、编号/状态居中、激活行粗体绿）
+            $headers = @('编号', '状态', '名称', '模型', '供应商')
+            $keys    = @('Num',  'Status', 'Name', 'Model', 'Provider')
+            $widths  = @(4, 6, 16, 26, 14)
+            $colCount = $headers.Count
+            $esc = [char]27
+            $gray     = "$esc[90m"
+            $reset    = "$esc[0m"
+            $boldCyan = "$esc[1;38;2;63;174;194m"
+            $boldGreen = "$esc[1;32m"
+            function _HLine($L, $J, $R) {
+                $line = $L
+                for ($i = 0; $i -lt $colCount; $i++) {
+                    if ($i -gt 0) { $line += $J }
+                    $line += ('─' * $widths[$i])
+                }
+                return $line + $R
+            }
+            function Write-DataRow($Values, $Bold) {
+                $valColor = if ($Bold) { $boldGreen } else { '' }
+                $sb = "$gray│$valColor"
+                for ($i = 0; $i -lt $colCount; $i++) {
+                    $val = [string]$Values[$i]
+                    $pad = $widths[$i] - (Get-DisplayWidth $val)
+                    if ($pad -lt 0) { $pad = 0 }
+                    if ($i -eq 0 -or $i -eq 1) {
+                        $leftPad  = [int][Math]::Floor($pad / 2)
+                        $rightPad = $pad - $leftPad
+                        if ($rightPad -lt 0) { $rightPad = 0 }
+                        $sb += ' ' * $leftPad + $val + ' ' * $rightPad
+                    } else {
+                        $sb += $val + ' ' * $pad
+                    }
+                    if ($i -lt $colCount - 1) { $sb += "$reset$gray│$valColor" }
+                }
+                $sb += "$reset$gray│$reset"
+                Write-Host $sb
+            }
+            function Write-HeadRow($Values) {
+                $sb = "$gray│$boldCyan"
+                for ($i = 0; $i -lt $colCount; $i++) {
+                    $val = [string]$Values[$i]
+                    $pad = $widths[$i] - (Get-DisplayWidth $val)
+                    if ($pad -lt 0) { $pad = 0 }
+                    if ($i -eq 0 -or $i -eq 1) {
+                        $leftPad  = [int][Math]::Floor($pad / 2)
+                        $rightPad = $pad - $leftPad
+                        if ($rightPad -lt 0) { $rightPad = 0 }
+                        $sb += ' ' * $leftPad + $val + ' ' * $rightPad
+                    } else {
+                        $sb += $val + ' ' * $pad
+                    }
+                    if ($i -lt $colCount - 1) { $sb += "$reset$gray│$boldCyan" }
+                }
+                $sb += "$reset$gray│$reset"
+                Write-Host $sb
+            }
+            Write-Host "$gray$(_HLine '╭' '┬' '╮')$reset"
+            Write-HeadRow $headers
+            Write-Host "$gray$(_HLine '├' '┼' '┤')$reset"
+            foreach ($r in $rows) {
+                $vals = @(); foreach ($k in $keys) { $vals += $r[$k] }
+                Write-DataRow $vals ($r.Status -eq '✅')
+            }
+            Write-Host "$gray$(_HLine '╰' '┴' '╯')$reset"
+        }
+
+        Write-Host ''
+
+        Write-ColorOutput "  操作：U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出" DarkGray
+        Write-ColorOutput "" White
+        if ($files.Count -gt 0) {
+            $choice = Read-Host "  选择模型 [1-$($files.Count)] › "
+        } else {
+            $choice = Read-Host "  操作：U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出 › "
+        }
+        if ($choice -eq 'q' -or $choice -eq 'Q') { return }
+        if ([string]::IsNullOrWhiteSpace($choice)) { continue }
+
+        # 字母 o：在 Windows 资源管理器中打开模板目录
+        if ($choice -eq 'o' -or $choice -eq 'O') {
+            if (-not [System.IO.Directory]::Exists($script:ModelsDir)) {
+                Write-ColorOutput "❌ 目录不存在: $($script:ModelsDir)" Yellow
+            } else {
+                Write-ColorOutput "📂 已打开: $($script:ModelsDir)" DarkGray
+                Start-Process explorer.exe $script:ModelsDir
+            }
+            Write-ColorOutput "" White
+            continue
+        }
+
+        # 字母 u：检查并升级
+        if ($choice -eq 'u' -or $choice -eq 'U') {
+            Invoke-Update
+            Read-Host "`n按回车返回菜单"
+            continue
+        }
+
+        $idx = 0
+        if (-not [int]::TryParse($choice, [ref]$idx) -or $idx -lt 1 -or $idx -gt $files.Count) {
+            Write-ColorOutput "❌ 无效: $choice" Red
+            Read-Host "`n按回车返回菜单"
+            continue
+        }
+
+        $name = [System.IO.Path]::GetFileNameWithoutExtension($files[$idx - 1])
+        try {
+            Invoke-Use -Name $name
+        } catch {
+            Write-ColorOutput "❌ 切换失败: $_" Red
+        }
+        # 停留展示切换结果，回车后清屏重绘菜单
+        Read-Host "`n按回车返回菜单"
+    }
+}
+
+# === 版本比较（semver，返回 -1/0/1）===
+function Compare-Version {
+    param(
+        [Parameter(Mandatory)] [string]$A,
+        [Parameter(Mandatory)] [string]$B
+    )
+    $pa = ($A -replace '^v', '').Split('.')
+    $pb = ($B -replace '^v', '').Split('.')
+    $len = [Math]::Max($pa.Count, $pb.Count)
+    for ($i = 0; $i -lt $len; $i++) {
+        $na = 0; $nb = 0
+        [void][int]::TryParse($(if ($i -lt $pa.Count) { $pa[$i] } else { '0' }), [ref]$na)
+        [void][int]::TryParse($(if ($i -lt $pb.Count) { $pb[$i] } else { '0' }), [ref]$nb)
+        if ($na -gt $nb) { return 1 }
+        if ($na -lt $nb) { return -1 }
+    }
+    return 0
+}
+
+# === 自更新：VERSION 是唯一版本源，Release 仅提供下载资产 ===
+function Get-SourceVersion {
+    try {
+        $uri = "$($script:VersionUrl)?nocache=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
+        $version = ([string](Invoke-RestMethod -Uri $uri -Headers @{ 'User-Agent' = 'codex-swap' } -TimeoutSec 15)).Trim()
+        if ($version -notmatch '^\d+\.\d+\.\d+$') { return $null }
+        return $version
+    } catch {
+        return $null
+    }
+}
+
+function Get-LatestReleaseInfo {
+    try {
+        $uri = "https://api.github.com/repos/$($script:RepoOwner)/$($script:RepoName)/releases/latest"
+        return Invoke-RestMethod -Uri $uri -Headers @{ 'User-Agent' = 'codex-swap' } -TimeoutSec 15
+    } catch {
+        return $null
+    }
+}
+
+function Invoke-Update {
+    Write-ColorOutput "🔎 检查更新 (v$($script:ScriptVersion))..." DarkGray
+    $sourceVersion = Get-SourceVersion
+    if ([string]::IsNullOrWhiteSpace($sourceVersion)) {
+        throw '无法获取有效 VERSION（网络问题或 GitHub 限流）'
+    }
+    $cmp = Compare-Version -A $sourceVersion -B $script:ScriptVersion
+    if ($cmp -le 0) {
+        Write-ColorOutput "✅ 已是最新版本 v$($script:ScriptVersion)" Green
+        return
+    }
+    Write-ColorOutput "发现新版本: v$sourceVersion（当前 v$($script:ScriptVersion)）" Yellow
+
+    $info = Get-LatestReleaseInfo
+    if ($null -eq $info) {
+        throw '无法获取最新版本（网络问题或 GitHub API 限流）'
+    }
+    $asset = $info.assets | Where-Object { $_.name -eq $script:ReleaseAsset } | Select-Object -First 1
+    if ($null -eq $asset) {
+        throw "找不到资产 $($script:ReleaseAsset)"
+    }
+
+    # 定位安装根目录（src 的上级）
+    $srcDir = $PSScriptRoot
+    $root = Split-Path $srcDir -Parent
+    if (-not [System.IO.File]::Exists((Join-Path $srcDir 'codex-swap.psm1'))) {
+        throw "无法定位模块目录: $srcDir"
+    }
+
+    $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-swap-update-" + [guid]::NewGuid().ToString('N'))
+    [System.IO.Directory]::CreateDirectory($tmpDir) | Out-Null
+    $zipPath = Join-Path $tmpDir 'update.zip'
+    $extract = Join-Path $tmpDir 'extract'
+    try {
+        Write-ColorOutput "⬇️  下载 $($script:ReleaseAsset)..." DarkGray
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zipPath -TimeoutSec 120
+        Expand-Archive -Path $zipPath -DestinationPath $extract -Force
+
+        # 校验解压产物
+        if (-not [System.IO.File]::Exists((Join-Path $extract 'src\codex-swap.psm1')) -or
+            -not [System.IO.File]::Exists((Join-Path $extract 'bin\codex-swap.cmd'))) {
+            throw "下载包结构不完整（缺 src/codex-swap.psm1 或 bin/codex-swap.cmd）"
+        }
+        $packageModule = [System.IO.File]::ReadAllText((Join-Path $extract 'src\codex-swap.psm1'), [System.Text.UTF8Encoding]::new($false))
+        $packageVersion = [regex]::Match($packageModule, '(?m)^\$script:ScriptVersion\s*=\s*''([^'']+)''').Groups[1].Value
+        if ($packageVersion -ne $sourceVersion) {
+            throw "下载资产版本 v$packageVersion 与 VERSION v$sourceVersion 不一致"
+        }
+
+        # 备份当前安装 → 替换 → 验证 → 清理
+        $old = "$root.old"
+        if ([System.IO.Directory]::Exists($old)) { Remove-Item $old -Recurse -Force }
+        Rename-Item $root $old
+
+        try {
+            Copy-Item (Join-Path $extract '*') $root -Recurse -Force
+            Import-Module (Join-Path $root 'src\codex-swap.psm1') -Force -ErrorAction Stop
+            Write-ColorOutput "✅ 已升级到 v$sourceVersion" Green
+            Remove-Item $old -Recurse -Force
+        } catch {
+            # 回滚
+            if ([System.IO.Directory]::Exists($root)) { Remove-Item $root -Recurse -Force }
+            Rename-Item $old $root
+            throw "升级失败，已回滚到原版本: $_"
+        }
+    } finally {
+        if ([System.IO.Directory]::Exists($tmpDir)) { Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+# === 体检 ===
+function Invoke-Doctor {
+    Write-ColorOutput "🩺 codex-swap v$($script:ScriptVersion) 体检" Cyan
+    Write-ColorOutput ("=" * 50) DarkGray
+
+    $ok = 0; $bad = 0
+    function _Check([string]$Name, [bool]$Cond) {
+        if ($Cond) { $script:ok++; Write-ColorOutput "  ✅ $Name" Green }
+        else { $script:bad++; Write-ColorOutput "  ❌ $Name" Red }
+    }
+    # 注意: 函数内 $script:ok 引用模块 scope 变量，直接内联计数
+    $checks = [System.Collections.Generic.List[object]]::new()
+    $checks.Add(@{ Name = "PowerShell 7+（当前 $($PSVersionTable.PSVersion)）"; Cond = ($PSVersionTable.PSVersion.Major -ge 7) })
+    $checks.Add(@{ Name = "数据目录: $($script:CodexHome)"; Cond = [System.IO.Directory]::Exists($script:CodexHome) })
+    $checks.Add(@{ Name = "config.toml 存在"; Cond = [System.IO.File]::Exists($script:ConfigPath) })
+    $checks.Add(@{ Name = "模板目录 models/"; Cond = [System.IO.Directory]::Exists($script:ModelsDir) })
+    if ([System.IO.Directory]::Exists($script:ModelsDir)) {
+        $tplCount = ([System.IO.Directory]::GetFiles($script:ModelsDir, '*.toml')).Count
+        $checks.Add(@{ Name = "模板数量: $tplCount 个"; Cond = ($tplCount -gt 0) })
+    }
+    $checks.Add(@{ Name = "状态目录 model-states/"; Cond = [System.IO.Directory]::Exists($script:StateDir) })
+    if ([System.IO.Directory]::Exists($script:StateDir)) {
+        $stCount = ([System.IO.Directory]::GetFiles($script:StateDir, '*.toml')).Count
+        $checks.Add(@{ Name = "状态数量: $stCount 个"; Cond = ($stCount -gt 0) })
+    }
+    foreach ($c in $checks) {
+        if ($c.Cond) { $ok++; Write-ColorOutput "  ✅ $($c.Name)" Green }
+        else { $bad++; Write-ColorOutput "  ❌ $($c.Name)" Red }
+    }
+    Write-ColorOutput ("=" * 50) DarkGray
+    Write-ColorOutput "通过 $ok / $($ok + $bad)" $(if ($bad -eq 0) { 'Green' } else { 'Yellow' })
 }
 
 # === 主分发 ===
-CMD="${1:-menu}"
-NAME="${2:-}"
-case "$CMD" in
-    menu|"") cmd_menu ;;
-    list)   cmd_list ;;
-    current) cmd_current ;;
-    use)    cmd_use "$NAME" ;;
-    update) cmd_update ;;
-    doctor) cmd_doctor ;;
-    help|-h|--help) show_help ;;
-    *)      warn "未知命令: $CMD"; show_help ;;
-esac
+function Invoke-CodexSwitch {
+    param(
+        [Parameter(Position = 0)]
+        [ValidateSet('list', 'current', 'use', 'update', 'doctor', 'help', 'menu')]
+        [string]$Command = 'menu',
+
+        [Parameter(Position = 1)]
+        [string]$Name
+    )
+    try {
+        switch ($Command) {
+            'help' {
+                Write-ColorOutput "用法: codex-swap [use <name>] | [list] | [current] | [update] | [doctor] | [help]" White
+                Write-ColorOutput "      菜单内: o 打开模板目录" DarkGray
+                Write-ColorOutput "      首次运行（模板目录为空）自动进入初始化向导" DarkGray
+            }
+            'menu' { Invoke-Menu }
+            'list' { Invoke-List }
+            'current' { Invoke-Current }
+            'update' { Invoke-Update }
+            'doctor' { Invoke-Doctor }
+            'use' {
+                if ([string]::IsNullOrWhiteSpace($Name)) {
+                    throw "use 需要指定模型名（例: codex-swap use deepseek）"
+                }
+                Invoke-Use -Name $Name
+            }
+            default { Invoke-Menu }
+        }
+    } catch {
+        Write-Host "❌ 错误: $_" -ForegroundColor Red
+    }
+}
+
+Export-ModuleMember -Function @(
+    'Invoke-CodexSwitch',
+    'Get-TemplateFingerprint',
+    'Get-CurrentFingerprint',
+    'Resolve-ActiveMarkers',
+    'Resolve-ActiveName',
+    'Save-ModelState',
+    'Get-SwitchContent',
+    'Save-ModelAuth',
+    'Get-SwitchAuth',
+    'Compare-Version',
+    'Get-DisplayWidth',
+    'Get-CodexHome',
+    'Get-ProviderIcon',
+    'Get-CodexInstallHint',
+    'Test-CodexVersion',
+    'Write-TemplateFile',
+    'Write-ModelsJsonFile'
+)

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.41] - 2026-08-02
+
+- Add unit tests for codex-switch module functionality
+
+
 ## [0.2.40] - 2026-08-02
 
 - refactor: 更新菜单提示信息，增强用户交互体验

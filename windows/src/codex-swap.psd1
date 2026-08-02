@@ -1,6 +1,6 @@
 @{
-    RootModule        = 'codex-switch.psm1'
-    ModuleVersion     = '0.2.40'
+    RootModule        = 'codex-swap.psm1'
+    ModuleVersion     = '0.2.41'
     GUID              = '3a7c9f2e-5b4d-4a1c-9e8f-6d2b7a4c1e50'
     Author            = 'Scott Z'
     CompanyName       = 'zeno528'
@@ -29,5 +29,5 @@
     CmdletsToExport   = @()
     VariablesToExport = @()
     AliasesToExport   = @()
-    PrivateData       = @{ PSData = @{ Tags = @('codex', 'model', 'switch'); LicenseUri = 'https://github.com/zeno528/codex-switch/blob/main/LICENSE' } }
+    PrivateData       = @{ PSData = @{ Tags = @('codex', 'model', 'switch'); LicenseUri = 'https://github.com/zeno528/codex-swap/blob/main/LICENSE' } }
 }
