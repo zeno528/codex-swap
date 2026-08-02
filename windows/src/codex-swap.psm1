@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.60'
+$script:ScriptVersion = '0.2.61'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -34,8 +34,15 @@ function Write-ColorOutput {
     Write-Host $Text -ForegroundColor $Color -NoNewline:$NoNewline
 }
 
+# === 工具：计算有效 provider（Codex 未填写时使用内置 OpenAI） ===
+function Get-EffectiveProvider {
+    param([AllowEmptyString()] [string]$Provider)
+    if ([string]::IsNullOrWhiteSpace($Provider)) { return 'openai' }
+    return $Provider.Trim()
+}
+
 # === 核心：从单个模板里提取 (model, model_provider, token 指纹) ===
-# 返回 hashtable；任一字段缺失时该字段为 $null。
+# 返回 hashtable；缺失 provider 时按内置 openai 处理。
 function Get-TemplateFingerprint {
     param([Parameter(Mandatory)] [string]$Path)
     $content = [System.IO.File]::ReadAllText($Path, [System.Text.UTF8Encoding]::new($false))
@@ -54,7 +61,7 @@ function Get-TemplateFingerprint {
         # 短 token 直接整串对比，避免前 6/后 6 重叠/越界
         $fp = $tok
     }
-    return @{ Model = $m; Provider = $p; TokenFingerprint = $fp }
+    return @{ Model = $m; Provider = (Get-EffectiveProvider $p); TokenFingerprint = $fp }
 }
 
 # === 工具：计算字符串的终端显示宽度（CJK/emoji 安全）===
@@ -120,10 +127,10 @@ function Get-CurrentFingerprint {
     } elseif ($null -ne $tok) {
         $fp = $tok
     }
-    return @{ Model = $m; Provider = $p; TokenFingerprint = $fp }
+    return @{ Model = $m; Provider = (Get-EffectiveProvider $p); TokenFingerprint = $fp }
 }
 
-# === 核心：标记每个模板是 active/none（与 Linux 分支一致：model+provider 匹配即激活） ===
+# === 核心：标记每个模板是 active/none（精确匹配优先，单一 provider 允许模型变化） ===
 # 返回: 路径 -> 'active' | 'none'
 function Resolve-ActiveMarkers {
     param(
@@ -131,21 +138,33 @@ function Resolve-ActiveMarkers {
         [Parameter(Mandatory)] [string]$ConfigPath
     )
     $current = Get-CurrentFingerprint -ConfigPath $ConfigPath
-    $markers = @{}
+    $providerFiles = @()
+    $exactFiles = @()
     foreach ($f in $Files) {
         $fp = Get-TemplateFingerprint -Path $f
-        if ($null -ne $fp.Model -and $fp.Model -eq $current.Model -and $fp.Provider -eq $current.Provider) {
-            $markers[$f] = 'active'
-        } else {
-            $markers[$f] = 'none'
+        if ($fp.Provider -eq $current.Provider) {
+            $providerFiles += $f
+            if (-not [string]::IsNullOrWhiteSpace($current.Model) -and $null -ne $fp.Model -and $fp.Model -eq $current.Model) {
+                $exactFiles += $f
+            }
         }
+    }
+    $activeFiles = @()
+    if ($exactFiles.Count -gt 0) {
+        $activeFiles = $exactFiles
+    } elseif ($null -ne $current.Model -and $providerFiles.Count -eq 1) {
+        $activeFiles = $providerFiles
+    }
+    $markers = @{}
+    foreach ($f in $Files) {
+        $markers[$f] = if ($activeFiles -contains $f) { 'active' } else { 'none' }
     }
     return $markers
 }
 
 # === 核心：找出当前 config.toml 对应哪个模板（源模型名） ===
-# 与 Linux resolve_active 一致：model+provider 唯一命中直接返回；
-# 多命中时用当前 token 指纹二次消歧，无法唯一确定则返回 $null（不误存 auth）
+# 与 Linux resolve_active 一致：model+provider 精确命中优先；
+# 无精确命中且 provider 仅一个模板时允许模型变化；多命中用 token 指纹消歧。
 # 返回: 模板名（不带 .toml），匹配不到返回 $null
 function Resolve-ActiveName {
     param(
@@ -156,10 +175,14 @@ function Resolve-ActiveName {
     if ([string]::IsNullOrEmpty($current.Model)) { return $null }
 
     $hits = [System.Collections.Generic.List[hashtable]]::new()
+    $providerHits = [System.Collections.Generic.List[hashtable]]::new()
     foreach ($f in $Files) {
         $fp = Get-TemplateFingerprint -Path $f
-        if ($null -ne $fp.Model -and $fp.Model -eq $current.Model -and $fp.Provider -eq $current.Provider) {
-            $hits.Add(@{ Path = $f; Fingerprint = $fp.TokenFingerprint })
+        if ($fp.Provider -eq $current.Provider) {
+            $providerHits.Add(@{ Path = $f; Fingerprint = $fp.TokenFingerprint })
+            if ($null -ne $fp.Model -and $fp.Model -eq $current.Model) {
+                $hits.Add(@{ Path = $f; Fingerprint = $fp.TokenFingerprint })
+            }
         }
     }
 
@@ -172,6 +195,9 @@ function Resolve-ActiveName {
                 return [System.IO.Path]::GetFileNameWithoutExtension($h.Path)
             }
         }
+    }
+    if ($hits.Count -eq 0 -and $null -ne $current.Model -and $providerHits.Count -eq 1) {
+        return [System.IO.Path]::GetFileNameWithoutExtension($providerHits[0].Path)
     }
     return $null
 }
@@ -483,6 +509,7 @@ function Invoke-List {
             if ($currentModel -ne '' -and $currentProvider -ne '') { break }
         }
     }
+    $currentProvider = Get-EffectiveProvider $currentProvider
 
     # 解析每个模板的数据 + 标记（config 不存在 → 全部 none）
     if ([System.IO.File]::Exists($script:ConfigPath)) {
@@ -501,6 +528,7 @@ function Invoke-List {
             if ($t -match '^model\s*=\s*(.*)$')            { $tplModel = $Matches[1].Trim().Trim('"') }
             if ($t -match '^model_provider\s*=\s*(.*)$')    { $tplProvider = $Matches[1].Trim().Trim('"') }
         }
+        $tplProvider = Get-EffectiveProvider $tplProvider
         $marker = switch ($markers[$files[$i]]) {
             'active' { '✅' }
             default  { ''  }
@@ -972,6 +1000,7 @@ function Invoke-Menu {
             if ($t -match '^model_provider\s*=\s*(.*)$')     { $currentProvider = $Matches[1].Trim().Trim('"') }
             if ($currentModel -ne '' -and $currentProvider -ne '') { break }
         }
+        $currentProvider = Get-EffectiveProvider $currentProvider
 
         $files = [System.IO.Directory]::GetFiles($script:ModelsDir, '*.toml')
 
@@ -995,6 +1024,7 @@ function Invoke-Menu {
                     if ($t -match '^model\s*=\s*(.*)$')            { $tplModel = $Matches[1].Trim().Trim('"') }
                     if ($t -match '^model_provider\s*=\s*(.*)$')    { $tplProvider = $Matches[1].Trim().Trim('"') }
                 }
+                $tplProvider = Get-EffectiveProvider $tplProvider
                 $marker = switch ($markers[$files[$i]]) {
                     'active' { '✅' }
                     default  { ''  }
@@ -1327,6 +1357,7 @@ function Invoke-CodexSwap {
 Export-ModuleMember -Function @(
     'Invoke-CodexSwap',
     'Invoke-Uninstall',
+    'Get-EffectiveProvider',
     'Get-TemplateFingerprint',
     'Get-CurrentFingerprint',
     'Resolve-ActiveMarkers',

@@ -23,6 +23,17 @@ grep -q deepseek-v4-flash <<< "$output"
 output="$(bash linux/codex-swap doctor)"
 grep -q '通过 7 / 7' <<< "$output"
 
+# provider 缺省按内置 OpenAI；单一 provider 模板允许模型名变化后仍识别激活
+fallback_home="$test_root/fallback/.codex"
+mkdir -p "$fallback_home/models" "$fallback_home/model-states"
+printf '%s\n' 'model = "gpt-5.6-luna"' > "$fallback_home/config.toml"
+printf '%s\n' 'model = "gpt-5.6-terra"' > "$fallback_home/models/openai.toml"
+output="$(CODEX_HOME="$fallback_home" bash linux/codex-swap list)"
+grep -q '✅' <<< "$output"
+printf '%s\n' 'model = "gpt-5.6-sol"' > "$fallback_home/models/openai-alt.toml"
+output="$(CODEX_HOME="$fallback_home" bash linux/codex-swap list)"
+! grep -q '✅' <<< "$output"
+
 output="$(bash linux/codex-swap use gpt)"
 grep -q '已切换至 gpt' <<< "$output"
 grep -q '📋 当前配置 · 4 行' <<< "$output"

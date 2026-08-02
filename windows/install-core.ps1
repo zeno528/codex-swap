@@ -116,7 +116,7 @@ try {
     # ---------- 汇总 ----------
     Write-Host ""
     Write-Host "✅ codex-swap $tag 安装完成" -ForegroundColor Green
-    Write-Host "   安装到: $InstallRoot · 快捷: sw" -ForegroundColor DarkGray
+    Write-Host "   安装到: $InstallRoot · 快捷启动命令: sw" -ForegroundColor DarkGray
     Write-Host "   升级: codex-swap update" -ForegroundColor DarkGray
 } finally {
     if (Test-Path $tmpDir) { Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue }

@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.60"
+VERSION="0.2.61"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -40,6 +40,12 @@ get_field() {
     val="${line#\"}"   # 去前引号
     val="${val%\"}"    # 去后引号
     echo "$val"
+}
+
+# === 工具：计算有效 provider（Codex 未填写时使用内置 OpenAI） ===
+effective_provider() {
+    local provider="$1"
+    printf '%s\n' "${provider:-openai}"
 }
 
 # === 工具：token 指纹（前6|后6，短 token 整串） ===
@@ -102,19 +108,20 @@ mask_line() {
     fi
 }
 
-# === 核心：识别当前 config 对应的源模型名（无匹配输出空） ===
+# === 核心：识别当前 config 对应的源模型名（精确匹配优先，单一 provider 允许模型变化） ===
 resolve_active() {
     local cur_model cur_provider cur_fp
     cur_model=$(get_field "$CONFIG" model)
-    cur_provider=$(get_field "$CONFIG" model_provider)
+    cur_provider=$(effective_provider "$(get_field "$CONFIG" model_provider)")
     cur_fp=$(token_fp "$(get_field "$CONFIG" experimental_bearer_token)")
     [ -n "$cur_model" ] || { echo ""; return; }
 
-    local hits=() f model provider fp
+    local hits=() provider_hits=() f model provider fp
     for f in "$MODELS_DIR"/*.toml; do
         [ -f "$f" ] || continue
         model=$(get_field "$f" model)
-        provider=$(get_field "$f" model_provider)
+        provider=$(effective_provider "$(get_field "$f" model_provider)")
+        [ "$provider" = "$cur_provider" ] && provider_hits+=("$f")
         if [ "$model" = "$cur_model" ] && [ "$provider" = "$cur_provider" ]; then
             fp=$(token_fp "$(get_field "$f" experimental_bearer_token)")
             hits+=("$f|$fp")
@@ -129,6 +136,9 @@ resolve_active() {
         for h in "${hits[@]}"; do
             [ "${h#*|}" = "$cur_fp" ] && { echo "$(basename "${h%%|*}" .toml)"; return; }
         done
+    fi
+    if [ "${#hits[@]}" -eq 0 ] && [ "${#provider_hits[@]}" -eq 1 ]; then
+        echo "$(basename "${provider_hits[0]}" .toml)"; return
     fi
     echo ""
 }
@@ -289,25 +299,42 @@ cmd_list() {
         return
     }
 
-    local cur_model cur_provider
+    local cur_model cur_provider provider_matches=0 exact_matches=0
     cur_model=$(get_field "$CONFIG" model)
-    cur_provider=$(get_field "$CONFIG" model_provider)
+    cur_provider=$(effective_provider "$(get_field "$CONFIG" model_provider)")
+
+    local f model provider
+    for f in "$MODELS_DIR"/*.toml; do
+        [ -f "$f" ] || continue
+        model=$(get_field "$f" model)
+        provider=$(effective_provider "$(get_field "$f" model_provider)")
+        if [ "$provider" = "$cur_provider" ]; then
+            provider_matches=$((provider_matches + 1))
+            if [ -n "$cur_model" ] && [ "$model" = "$cur_model" ]; then
+                exact_matches=$((exact_matches + 1))
+            fi
+        fi
+    done
 
     printf "${BOLD_CYAN}  🔍 模型配置${C}\n"
     table_rule '╭' '┬' '╮' 4 6 16 26 14
     table_row '编号' '状态' '名称' '模型' '供应商' "$BOLD_CYAN"
     table_rule '├' '┼' '┤' 4 6 16 26 14
 
-    local i=0 f name model provider status color
+    local i=0 name status color
     for f in "$MODELS_DIR"/*.toml; do
         [ -f "$f" ] || continue
         i=$((i+1))
         name=$(basename "$f" .toml)
         model=$(get_field "$f" model)
-        provider=$(get_field "$f" model_provider)
+        provider=$(effective_provider "$(get_field "$f" model_provider)")
         status=''
         color="$C"
-        if [ "$model" = "$cur_model" ] && [ "$provider" = "$cur_provider" ]; then
+        if [ -n "$cur_model" ] && [ "$model" = "$cur_model" ] && [ "$provider" = "$cur_provider" ]; then
+            status='✅'
+            color="$BOLD_GREEN"
+        elif [ -n "$cur_model" ] && [ "$exact_matches" -eq 0 ] &&
+             [ "$provider_matches" -eq 1 ] && [ "$provider" = "$cur_provider" ]; then
             status='✅'
             color="$BOLD_GREEN"
         fi

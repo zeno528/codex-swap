@@ -40,7 +40,7 @@ show-context-window-usage = true
 '@, [System.Text.UTF8Encoding]::new($false))
     $fp = Get-CurrentFingerprint -ConfigPath $tmpCfg
     Assert-True ($fp.Model -eq 'gpt-5.6-terra') '解析 config 的 model'
-    Assert-True ($null -eq $fp.Provider) '无 model_provider 时为 $null'
+    Assert-True ($fp.Provider -eq 'openai') '无 model_provider 时默认使用 openai'
 } finally { Remove-Item $tmpCfg -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== Test 3: Resolve-ActiveMarkers ===" -ForegroundColor Cyan
@@ -59,6 +59,20 @@ try {
     $markers = Resolve-ActiveMarkers -Files @($dsPath, $gptPath) -ConfigPath $cfgPath
     Assert-True ($markers[$dsPath] -eq 'active') 'deepseek 模板标为 active'
     Assert-True ($markers[$gptPath] -eq 'none') 'gpt 模板标为 none'
+
+    $openaiDefaultPath = Join-Path $tmpDir 'openai.toml'
+    [System.IO.File]::WriteAllText($openaiDefaultPath, 'model = "gpt-5.6-terra"', [System.Text.UTF8Encoding]::new($false))
+    $openaiConfigPath = Join-Path $cfgDir 'openai-config.toml'
+    [System.IO.File]::WriteAllText($openaiConfigPath, 'model = "gpt-5.6-luna"', [System.Text.UTF8Encoding]::new($false))
+    $markers = Resolve-ActiveMarkers -Files @($openaiDefaultPath) -ConfigPath $openaiConfigPath
+    Assert-True ($markers[$openaiDefaultPath] -eq 'active') '缺省 provider 按 openai 匹配不同模型'
+
+    $openaiDefaultAltPath = Join-Path $tmpDir 'openai-alt.toml'
+    [System.IO.File]::WriteAllText($openaiDefaultAltPath, 'model = "gpt-5.6-sol"', [System.Text.UTF8Encoding]::new($false))
+    $markers = Resolve-ActiveMarkers -Files @($openaiDefaultPath, $openaiDefaultAltPath) -ConfigPath $openaiConfigPath
+    Assert-True ($markers[$openaiDefaultPath] -eq 'none' -and $markers[$openaiDefaultAltPath] -eq 'none') '多个缺省 openai 模板不误标激活'
+
+    Assert-True ((Get-EffectiveProvider '') -eq 'openai') '空 provider 归一化为 openai'
 } finally { Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== Test 4: 同 model 多模板按 model+provider 匹配（与 Linux 一致） ===" -ForegroundColor Cyan
@@ -124,6 +138,11 @@ try {
     # 多命中但当前 token 为空：无法唯一确定 → $null（避免 auth 误存到错误模型）
     [System.IO.File]::WriteAllText($cfg6, 'model = "deepseek-v4-flash"' + "`n" + 'model_provider = "deepseek"', [System.Text.UTF8Encoding]::new($false))
     Assert-True ($null -eq (Resolve-ActiveName -Files @($t1, $t2) -ConfigPath $cfg6)) '多命中且无指纹时返回 $null'
+
+    $openaiDefaultPath = Join-Path $tmpDir6 'openai.toml'
+    [System.IO.File]::WriteAllText($openaiDefaultPath, 'model = "gpt-5.6-terra"', [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($cfg6, 'model = "gpt-5.6-luna"', [System.Text.UTF8Encoding]::new($false))
+    Assert-True ((Resolve-ActiveName -Files @($openaiDefaultPath) -ConfigPath $cfg6) -eq 'openai') '缺省 provider 按 openai 识别源模板'
 } finally { Remove-Item $tmpDir6 -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== Test 7: Compare-Version ===" -ForegroundColor Cyan

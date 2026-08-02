@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.61] - 2026-08-02
+
+- ✨ feat(provider): 支持缺省 OpenAI provider 并优化激活识别
+
+
 ## [0.2.60] - 2026-08-02
 
 - ♻️ refactor(win): 拆分 Windows 安装器为引导器与核心安装脚本

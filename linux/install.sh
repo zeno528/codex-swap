@@ -86,5 +86,5 @@ esac
 
 # ---------- 汇总 ----------
 printf '\n\033[32m✅ codex-swap %s 安装完成\033[0m\n' "$TAG"
-echo "   安装到: $LAUNCHER · 快捷: sw"
+echo "   安装到: $LAUNCHER · 快捷启动命令: sw"
 echo "   升级: codex-swap update"
