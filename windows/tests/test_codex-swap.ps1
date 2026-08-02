@@ -371,6 +371,24 @@ try {
     Assert-True ((Get-ConfigDistance -TemplatePath $cfgG -ConfigPath $cfgG) -eq 0) '相同内容距离为 0'
     Assert-True ((Get-ConfigDistance -TemplatePath $c1 -ConfigPath $cfgG) -gt 0) '不同内容距离大于 0'
 
+    # provider 段显示名消歧：内容完全相同但 name 不同 → 按 name 区分（大小写敏感）
+    $baseTpl = 'model = "deepseek-v4-flash"' + "`n" + 'model_provider = "custom"'
+    $n1 = Join-Path $tmpB 'goals-name.toml'
+    [System.IO.File]::WriteAllText($n1, $baseTpl + "`n" + '[model_providers.custom]' + "`n" + 'name = "OpenAI"', [System.Text.UTF8Encoding]::new($false))
+    $n2 = Join-Path $tmpB 'cc-name.toml'
+    [System.IO.File]::WriteAllText($n2, $baseTpl + "`n" + '[model_providers.custom]' + "`n" + 'name = "DeepSeek"', [System.Text.UTF8Encoding]::new($false))
+    $cfgN = Join-Path $tmpB 'name-config.toml'
+    [System.IO.File]::WriteAllText($cfgN, $baseTpl + "`n" + '[model_providers.custom]' + "`n" + 'name = "OpenAI"', [System.Text.UTF8Encoding]::new($false))
+    Assert-True ((Get-ProviderDisplayName -Path $n1) -eq 'OpenAI') '解析 provider 显示名'
+    Assert-True ((Get-ProviderDisplayName -Path $n2) -eq 'DeepSeek') '大小写不同的显示名保持原样'
+    $markers = Resolve-ActiveMarkers -Files @($n1, $n2) -ConfigPath $cfgN
+    Assert-True ($markers[$n1] -eq 'active' -and $markers[$n2] -eq 'none') 'provider 段 name 消歧：OpenAI 命中'
+    Assert-True ((Resolve-ActiveName -Files @($n1, $n2) -ConfigPath $cfgN) -eq 'goals-name') 'Resolve-ActiveName provider name 消歧'
+    $cfgN2 = Join-Path $tmpB 'name-config-lower.toml'
+    [System.IO.File]::WriteAllText($cfgN2, $baseTpl + "`n" + '[model_providers.custom]' + "`n" + 'name = "openai"', [System.Text.UTF8Encoding]::new($false))
+    $markers = Resolve-ActiveMarkers -Files @($n1, $n2) -ConfigPath $cfgN2
+    Assert-True ($markers[$n1] -eq 'none' -and $markers[$n2] -eq 'none') 'provider name 大小写敏感（OpenAI ≠ openai）'
+
     # 大小写敏感：model 大小写不同不匹配
     $cu = Join-Path $tmpB 'upper.toml'
     [System.IO.File]::WriteAllText($cu, 'model = "DeepSeek-v4-flash"' + "`n" + 'model_provider = "custom"', [System.Text.UTF8Encoding]::new($false))

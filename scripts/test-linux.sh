@@ -75,6 +75,19 @@ printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' > "$edge
 output="$(CODEX_HOME="$edge_same_home" bash linux/codex-swap list)"
 if grep -q '✅' <<< "$output"; then exit 1; fi
 
+# provider 段显示名消歧：内容完全相同但 name 不同 → 按 name 区分（大小写敏感）
+edge_name_home="$test_root/edgename/.codex"
+mkdir -p "$edge_name_home/models" "$edge_name_home/model-states"
+printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' '[model_providers.custom]' 'name = "OpenAI"' > "$edge_name_home/models/goals.toml"
+printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' '[model_providers.custom]' 'name = "DeepSeek"' > "$edge_name_home/models/cc.toml"
+printf '%s\n' 'model = "deepseek-v4-flash"' 'model_provider = "custom"' '[model_providers.custom]' 'name = "OpenAI"' > "$edge_name_home/config.toml"
+output="$(CODEX_HOME="$edge_name_home" bash linux/codex-swap list)"
+clean=$(printf '%s\n' "$output" | sed 's/\x1b\[[0-9;]*m//g')
+goals_line=$(grep '│goals' <<< "$clean" | head -1)
+cc_line=$(grep '│cc' <<< "$clean" | head -1)
+grep -q '✅' <<< "$goals_line"
+if grep -q '✅' <<< "$cc_line"; then exit 1; fi
+
 # 第三方单 provider：model 不同不允许“模型变化”回退
 printf '%s\n' 'model = "deepseek-v4-pro"' 'model_provider = "custom"' > "$edge_home/config.toml"
 output="$(CODEX_HOME="$edge_home" bash linux/codex-swap list)"

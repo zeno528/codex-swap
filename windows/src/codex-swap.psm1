@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.71'
+$script:ScriptVersion = '0.2.72'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -104,6 +104,19 @@ function Get-ConfigDistance {
         }
     }
     return (($cfg.Count - $common) + ($tpl.Count - $common))
+}
+
+# === 工具：提取 provider 配置段显示名（[model_providers.<id>] 下的 name，大小写敏感） ===
+function Get-ProviderDisplayName {
+    param([Parameter(Mandatory)] [string]$Path)
+    $inSection = $false
+    foreach ($line in [System.IO.File]::ReadAllLines($Path, [System.Text.UTF8Encoding]::new($false))) {
+        $t = $line.Trim()
+        if ($t -match '^\[model_providers\.[^\]]+\]$') { $inSection = $true; continue }
+        if ($inSection -and $t -match '^name\s*=\s*"(.*)"\s*$') { return $Matches[1] }
+        if ($inSection -and $t -match '^\[') { $inSection = $false }
+    }
+    return ''
 }
 
 # === 核心：从单个模板里提取 (model, model_provider, token 指纹) ===
@@ -226,19 +239,30 @@ function Resolve-ActiveMarkers {
                 }
             }
         } else {
-            # 多命中且无指纹：按内容差异行数选最小且唯一者（第三方同 provider 模板区分）
-            $best = $null
-            $bestDist = -1
-            foreach ($f in $exactFiles) {
-                $d = Get-ConfigDistance -TemplatePath $f -ConfigPath $ConfigPath
-                if ($bestDist -eq -1 -or $d -lt $bestDist) {
-                    $bestDist = $d
-                    $best = $f
-                } elseif ($d -eq $bestDist) {
-                    $best = $null
+            # 多命中且无指纹：provider 段显示名一致优先（大小写敏感），内容差异兜底
+            $cfgPname = Get-ProviderDisplayName -Path $ConfigPath
+            $nameHits = @()
+            if (-not [string]::IsNullOrWhiteSpace($cfgPname)) {
+                foreach ($f in $exactFiles) {
+                    if ((Get-ProviderDisplayName -Path $f) -ceq $cfgPname) { $nameHits += $f }
                 }
             }
-            if ($null -ne $best) { $activeFiles = @($best) }
+            if ($nameHits.Count -eq 1) {
+                $activeFiles = $nameHits
+            } else {
+                $best = $null
+                $bestDist = -1
+                foreach ($f in $exactFiles) {
+                    $d = Get-ConfigDistance -TemplatePath $f -ConfigPath $ConfigPath
+                    if ($bestDist -eq -1 -or $d -lt $bestDist) {
+                        $bestDist = $d
+                        $best = $f
+                    } elseif ($d -eq $bestDist) {
+                        $best = $null
+                    }
+                }
+                if ($null -ne $best) { $activeFiles = @($best) }
+            }
         }
     } elseif ($current.Provider -ceq 'openai' -and $null -ne $current.Model -and $providerFiles.Count -eq 1) {
         $activeFiles = $providerFiles
@@ -284,8 +308,18 @@ function Resolve-ActiveName {
             }
         }
     }
-    # 多命中且无指纹：按内容差异行数选最小且唯一者（第三方同 provider 模板区分）
+    # 多命中且无指纹：provider 段显示名一致优先（大小写敏感），内容差异兜底
     if ($hits.Count -gt 1 -and [string]::IsNullOrEmpty($current.TokenFingerprint)) {
+        $cfgPname = Get-ProviderDisplayName -Path $ConfigPath
+        $nameHits = @()
+        if (-not [string]::IsNullOrWhiteSpace($cfgPname)) {
+            foreach ($h in $hits) {
+                if ((Get-ProviderDisplayName -Path $h.Path) -ceq $cfgPname) { $nameHits += $h.Path }
+            }
+        }
+        if ($nameHits.Count -eq 1) {
+            return [System.IO.Path]::GetFileNameWithoutExtension($nameHits[0])
+        }
         $best = $null
         $bestDist = -1
         foreach ($h in $hits) {
@@ -1551,6 +1585,7 @@ Export-ModuleMember -Function @(
     'Get-TemplateDescription',
     'Set-TemplateDescription',
     'Get-ConfigDistance',
+    'Get-ProviderDisplayName',
     'Get-TemplateFingerprint',
     'Get-CurrentFingerprint',
     'Resolve-ActiveMarkers',

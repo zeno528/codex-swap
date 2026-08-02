@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.71"
+VERSION="0.2.72"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -67,6 +67,21 @@ config_distance() {
     tpl_lines=$(wc -l < "$tpl" | tr -d ' ')
     cfg_lines=$(wc -l < "$CONFIG" | tr -d ' ')
     echo $((cfg_lines - common + tpl_lines - common))
+}
+
+# === 工具：提取 provider 配置段显示名（[model_providers.<id>] 下的 name，大小写敏感） ===
+get_provider_name() {
+    local file="$1"
+    awk '
+        /^\[model_providers\.[^]]*\]$/ { insec=1; next }
+        insec && /^[[:space:]]*name[[:space:]]*=/ {
+            line=$0
+            sub(/^[^=]*=[[:space:]]*/, "", line)
+            gsub(/"/, "", line)
+            print line
+            exit
+        }
+    ' "$file"
 }
 
 # === 工具：semver 比较 v1 > v2 ? ===
@@ -147,8 +162,20 @@ resolve_active() {
             [ "${h#*|}" = "$cur_fp" ] && { echo "$(basename "${h%%|*}" .toml)"; return; }
         done
     fi
-    # 多命中且无指纹可消歧：按内容差异行数选最小且唯一者（第三方同 provider 模板区分）
+    # 多命中且无指纹可消歧：provider 段显示名一致优先（大小写敏感），内容差异兜底
     if [ "${#hits[@]}" -gt 1 ] && [ -z "$cur_fp" ]; then
+        local cfg_pname="" name_hits=0 name_best="" pname
+        cfg_pname=$(get_provider_name "$CONFIG")
+        for h in "${hits[@]}"; do
+            pname=$(get_provider_name "${h%%|*}")
+            if [ -n "$cfg_pname" ] && [ "$pname" = "$cfg_pname" ]; then
+                name_hits=$((name_hits + 1))
+                name_best="${h%%|*}"
+            fi
+        done
+        if [ "$name_hits" -eq 1 ]; then
+            echo "$(basename "$name_best" .toml)"; return
+        fi
         local best="" best_dist=-1 hp d
         for h in "${hits[@]}"; do
             hp="${h%%|*}"
@@ -360,9 +387,29 @@ cmd_list() {
     table_row '编号' '状态' '名称' '模型' '供应商' "$BOLD_CYAN" "$name_width" '描述'
     table_rule '├' '┼' '┤' 4 6 "$name_width" 26 14 26
 
-    # 第三方多命中且无指纹可消歧时：按内容差异行数选最小且唯一者
+    # 第三方多命中且无指纹可消歧时：provider 段显示名一致优先（大小写敏感）
     local best_exact="" best_dist=-1
     if [ "$exact_matches" -gt 1 ] && [ "$cur_provider" != "openai" ] && [ -z "$cur_fp" ]; then
+        local cfg_pname name_hits=0 name_best="" pname
+        cfg_pname=$(get_provider_name "$CONFIG")
+        for f in "$MODELS_DIR"/*.toml; do
+            [ -f "$f" ] || continue
+            model=$(get_field "$f" model)
+            provider=$(effective_provider "$(get_field "$f" model_provider)")
+            if [ -n "$cur_model" ] && [ "$model" = "$cur_model" ] && [ "$provider" = "$cur_provider" ]; then
+                pname=$(get_provider_name "$f")
+                if [ -n "$cfg_pname" ] && [ "$pname" = "$cfg_pname" ]; then
+                    name_hits=$((name_hits + 1))
+                    name_best="$f"
+                fi
+            fi
+        done
+        if [ "$name_hits" -eq 1 ]; then
+            best_exact="$name_best"
+        fi
+    fi
+    # 内容差异兜底：provider 名未唯一命中时按差异行数选最小且唯一者
+    if [ "$exact_matches" -gt 1 ] && [ "$cur_provider" != "openai" ] && [ -z "$cur_fp" ] && [ -z "$best_exact" ]; then
         for f in "$MODELS_DIR"/*.toml; do
             [ -f "$f" ] || continue
             model=$(get_field "$f" model)
