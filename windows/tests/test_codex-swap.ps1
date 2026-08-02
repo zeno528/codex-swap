@@ -244,11 +244,13 @@ Write-Host "`n=== Test 16: PowerShell 5.1+ 兼容约束 ===" -ForegroundColor Cy
 $manifestText = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src/codex-swap.psd1'), [System.Text.UTF8Encoding]::new($false))
 $cmdText = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '../bin/codex-swap.cmd'), [System.Text.UTF8Encoding]::new($false))
 $installText = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '../install.ps1'), [System.Text.UTF8Encoding]::new($false))
+$installCoreText = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '../install-core.ps1'), [System.Text.UTF8Encoding]::new($false))
 Assert-True ($manifestText -match "PowerShellVersion\s*=\s*'5\.1'") '模块最低版本为 PowerShell 5.1'
 Assert-True ($moduleText -match 'IsWindowsPlatform' -and $moduleText -notmatch '\$IsWindows\b') 'Windows 判断不依赖 PowerShell 6+ 自动变量'
 Assert-True ($cmdText -match 'where pwsh' -and $cmdText -match 'powershell\.exe') '启动器优先 pwsh、回退 powershell.exe'
-Assert-True ($installText -match '需要 PowerShell 5\.1\+' -and $installText -match 'where pwsh') '安装器支持 5.1 并生成兼容启动器'
-Assert-True ($moduleText -match 'Invoke-WebRequest -UseBasicParsing' -and $installText -match 'Invoke-WebRequest -UseBasicParsing') '下载路径显式使用安全的基础解析'
+Assert-True ($installCoreText -match '需要 PowerShell 5\.1\+' -and $installCoreText -match 'where pwsh') '核心安装器支持 5.1 并生成兼容启动器'
+Assert-True ($installText -match 'install-core\.ps1' -and $installText -match 'scriptblock::Create' -and $installText -match 'FEFF') 'ASCII 引导器移除 BOM 并加载核心安装器'
+Assert-True ($moduleText -match 'Invoke-WebRequest -UseBasicParsing' -and $installCoreText -match 'Invoke-WebRequest -UseBasicParsing') '下载路径显式使用安全的基础解析'
 
 Write-Host "`n=== Test 17: PowerShell 5.1 脚本编码 ===" -ForegroundColor Cyan
 function Test-Utf8Bom([string]$Path) {
@@ -259,13 +261,14 @@ $scriptFiles = @(
     (Join-Path $PSScriptRoot '../src/codex-swap.psm1'),
     (Join-Path $PSScriptRoot '../src/codex-swap.ps1'),
     (Join-Path $PSScriptRoot '../src/codex-swap.psd1'),
-    (Join-Path $PSScriptRoot '../install.ps1'),
+    (Join-Path $PSScriptRoot '../install-core.ps1'),
     (Join-Path $PSScriptRoot '../uninstall.ps1'),
     $PSCommandPath
 )
 foreach ($scriptFile in $scriptFiles) {
     Assert-True (Test-Utf8Bom $scriptFile) "脚本使用 UTF-8 BOM：$(Split-Path $scriptFile -Leaf)"
 }
+Assert-True (-not (Test-Utf8Bom (Join-Path $PSScriptRoot '../install.ps1'))) 'ASCII 引导器不使用 BOM，支持 irm|iex'
 
 Write-Host "`n=== 总结 ===" -ForegroundColor Cyan
 Write-Host "通过: $pass" -ForegroundColor Green

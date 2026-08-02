@@ -56,7 +56,7 @@ windows/bin/codex-swap.cmd # 启动器（优先 pwsh，回退 powershell.exe）
 
 ## 分发
 
-- **Windows**：PowerShell 5.1+ 可用，PowerShell 7 推荐；`windows/install.ps1`（irm|iex）→ GitHub API 取 latest release → 下载 `codex-swap-windows.zip` → 解压到 `~/.local/bin/codex-swap/` → 写优先 `pwsh`、回退 `powershell.exe` 的 `.cmd` shim → 确保 PATH
+- **Windows**：PowerShell 5.1+ 可用，PowerShell 7 推荐；`windows/install.ps1`（无 BOM ASCII bootstrap，支持 irm|iex）→ `install-core.ps1` → GitHub API 取 latest release → 下载 `codex-swap-windows.zip` → 解压到 `~/.local/bin/codex-swap/` → 写优先 `pwsh`、回退 `powershell.exe` 的 `.cmd` shim → 确保 PATH
 - **Linux/WSL2/macOS**：`linux/install.sh`（bash <(curl ...)）→ 下载统一的 `codex-swap-linux-macos.zip` → 安装 `~/.local/bin/codex-swap`（单一脚本）→ 确保 PATH（自动写入 `~/.bashrc` 与 `~/.zshrc`）。**纯 bash 独立实现，零 pwsh/Windows 依赖；macOS 自带 bash 3.2 即可运行（不用 bash 4+ 特性，路径解析为纯 bash 实现，打开目录按系统选择 `open`/`xdg-open`）**
 - **自更新**：Windows `Invoke-Update` / Linux/macOS `cmd_update` 均使用统一的 `codex-swap-linux-macos.zip`；下载后必须校验资产内部版本等于 `VERSION`，不匹配即拒绝替换。
 - **CI/发行**：ci.yml 调用 `test.yml` 复用 Windows+Linux/macOS 测试；main 上 `VERSION` 变化且全部测试通过后，由同一 workflow 构建 Windows 与 Linux/macOS 两份 zip 并创建 Release。

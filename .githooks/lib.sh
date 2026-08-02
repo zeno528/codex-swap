@@ -6,7 +6,7 @@ ROOT="$(git rev-parse --show-toplevel)"
 is_release_change() {
     while IFS= read -r f; do
         case "$f" in
-            linux/*|windows/src/*|windows/bin/*|windows/install.ps1|windows/uninstall.ps1|scripts/build.sh)
+            linux/*|windows/src/*|windows/bin/*|windows/install.ps1|windows/install-core.ps1|windows/uninstall.ps1|scripts/build.sh)
                 return 0 ;;
         esac
     done < <(git diff --cached --name-only)
