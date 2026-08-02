@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.47'
+$script:ScriptVersion = '0.2.48'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -1229,7 +1229,9 @@ function Invoke-Update {
             Copy-Item (Join-Path $extract 'src') (Join-Path $root 'src') -Recurse -Force
             Copy-Item (Join-Path $extract 'bin') (Join-Path $root 'bin') -Recurse -Force
             Import-Module (Join-Path $root 'src\codex-swap.psm1') -Force -ErrorAction Stop
-            Write-ColorOutput "  ✅ 已升级至 v$sourceVersion" Green
+            # Import-Module -Force 会卸载当前正在运行的旧模块实例，模块私有函数
+            # （Write-ColorOutput）随之失效；此处只能使用全局 cmdlet（Write-Host）
+            Write-Host "  ✅ 已升级至 v$sourceVersion" -ForegroundColor Green
             Remove-Item $old -Recurse -Force
         } catch {
             # 回滚
