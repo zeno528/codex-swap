@@ -6,8 +6,9 @@
 
 模板播种 + 状态恢复：每个模型独立维护自己最新的完整配置，来回切换不丢使用记录、互不污染。
 
-[![版本](https://img.shields.io/github/v/tag/zeno528/codex-swap?label=版本&color=blue)](https://github.com/zeno528/codex-swap/releases)
 [![License](https://img.shields.io/github/license/zeno528/codex-swap?label=License)](LICENSE)
+![平台](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%2FWSL2-3FAEC2)
+![运行时](https://img.shields.io/badge/PowerShell%207%20%C2%B7%20Bash-3FAEC2)
 
 </div>
 
