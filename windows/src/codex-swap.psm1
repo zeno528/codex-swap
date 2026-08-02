@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.67'
+$script:ScriptVersion = '0.2.68'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -22,6 +22,7 @@ $script:ConfigPath = Join-Path $script:CodexHome 'config.toml'
 $script:AuthPath   = Join-Path $script:CodexHome 'auth.json'
 $script:ModelsDir  = Join-Path $script:CodexHome 'models'
 $script:StateDir   = Join-Path $script:CodexHome 'model-states'
+$script:DescriptionsDir = Join-Path $script:ModelsDir 'descriptions'
 $script:ModelsJson = Join-Path $script:CodexHome 'models.json'
 $script:DeepseekMinCodex = '0.144.0'
 
@@ -50,6 +51,37 @@ function Get-EffectiveProvider {
 function Test-TemplateName {
     param([Parameter(Mandatory)] [string]$Name)
     return ($Name -match '^[A-Za-z0-9][A-Za-z0-9._-]*$')
+}
+
+# === 工具：读取模板描述（descriptions/<name>.desc 首行，无则返回空） ===
+function Get-TemplateDescription {
+    param(
+        [Parameter(Mandatory)] [string]$Name,
+        [Parameter(Mandatory)] [string]$DescriptionsDir
+    )
+    $p = Join-Path $DescriptionsDir "$Name.desc"
+    if (-not [System.IO.File]::Exists($p)) { return '' }
+    return (([System.IO.File]::ReadAllLines($p, [System.Text.UTF8Encoding]::new($false))) | Select-Object -First 1)
+}
+
+# === 工具：写入/清除模板描述（空描述删除文件，返回路径或 $null） ===
+function Set-TemplateDescription {
+    param(
+        [Parameter(Mandatory)] [string]$Name,
+        [AllowEmptyString()] [string]$Description,
+        [Parameter(Mandatory)] [string]$DescriptionsDir
+    )
+    $p = Join-Path $DescriptionsDir "$Name.desc"
+    if ([string]::IsNullOrWhiteSpace($Description)) {
+        if ([System.IO.File]::Exists($p)) { [System.IO.File]::Delete($p) }
+        return $null
+    }
+    if (-not [System.IO.Directory]::Exists($DescriptionsDir)) {
+        [System.IO.Directory]::CreateDirectory($DescriptionsDir) | Out-Null
+    }
+    $content = $Description.Trim() + "`n"
+    [System.IO.File]::WriteAllText($p, $content, [System.Text.UTF8Encoding]::new($false))
+    return $p
 }
 
 # === 核心：从单个模板里提取 (model, model_provider, token 指纹) ===
@@ -858,7 +890,13 @@ function Invoke-BuiltinTemplate {
         break
     }
 
+    Write-WizardDivider
+    Write-ColorOutput "  💬 模板描述" Cyan
+    Write-ColorOutput "  说明这个配置的用途，可留空跳过" DarkGray
+    $desc = Read-Host '  描述 › '
+
     $path = Write-TemplateFile -Name $name -Content $script:TemplateDeepseek -ApiKey $key -ModelsDir $script:ModelsDir
+    Set-TemplateDescription -Name $name -Description $desc -DescriptionsDir $script:DescriptionsDir | Out-Null
     Write-ColorOutput "  ✅ 模板已创建：$path" Green
     $jsonPath = Write-ModelsJsonFile -Path $script:ModelsJson
     Write-ColorOutput "  ✅ 模型目录已写入：$jsonPath" Green
@@ -1061,19 +1099,22 @@ function Invoke-Menu {
                     'active' { '✅' }
                     default  { ''  }
                 }
+                $tplDesc = Get-TemplateDescription -Name $name -DescriptionsDir $script:DescriptionsDir
+                if ([string]::IsNullOrWhiteSpace($tplDesc)) { $tplDesc = '-' }
                 $rows.Add(@{
                     Num      = "$(($i + 1))"
                     Status   = $marker
                     Name     = $name
                     Model    = $(if ($tplModel) { $tplModel } else { '-' })
                     Provider = "$(Get-ProviderIcon $tplProvider $tplModel)$(if ($tplProvider) { $tplProvider } else { '-' })"
+                    Desc     = $tplDesc
                 })
             }
 
             # 表格渲染（与 Linux 分支一致：标题、固定列宽、编号/状态居中、激活行粗体绿）
             Write-Host "  $esc[1;38;2;63;174;194m🔍 模型配置$esc[0m"
-            $headers = @('编号', '状态', '名称', '模型', '供应商')
-            $keys    = @('Num',  'Status', 'Name', 'Model', 'Provider')
+            $headers = @('编号', '状态', '名称', '模型', '供应商', '描述')
+            $keys    = @('Num',  'Status', 'Name', 'Model', 'Provider', 'Desc')
             # 名称列自适应：表头与所有模板名的最大显示宽度，上限 32
             $nameWidth = Get-DisplayWidth '名称'
             foreach ($r in $rows) {
@@ -1081,7 +1122,7 @@ function Invoke-Menu {
                 if ($w -gt $nameWidth) { $nameWidth = $w }
             }
             if ($nameWidth -gt 32) { $nameWidth = 32 }
-            $widths  = @(4, 6, $nameWidth, 26, 14)
+            $widths  = @(4, 6, $nameWidth, 26, 14, 26)
             $colCount = $headers.Count
             $esc = [char]27
             $gray     = "$esc[90m"
@@ -1153,12 +1194,12 @@ function Invoke-Menu {
             Write-Host "  $gray$(_HLine '╰' '┴' '╯')$reset"
         }
 
-        Write-ColorOutput "  操作：N 新建配置 · U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出" DarkGray
+        Write-ColorOutput "  操作：N 新建配置 · E 编辑描述 · U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出" DarkGray
         Write-ColorOutput "" White
         if ($files.Count -gt 0) {
             $choice = Read-Host "  选择模型 [1-$($files.Count)] › "
         } else {
-            $choice = Read-Host "  操作：N 新建配置 · U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出 › "
+            $choice = Read-Host "  操作：N 新建配置 · E 编辑描述 · U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出 › "
         }
         if ($choice -eq 'q' -or $choice -eq 'Q') { return }
         if ([string]::IsNullOrWhiteSpace($choice)) { continue }
@@ -1166,6 +1207,32 @@ function Invoke-Menu {
         # 字母 n：新建模型配置（DeepSeek 官方配置 / 导入模板，日常有模板也可用）
         if ($choice -eq 'n' -or $choice -eq 'N') {
             Invoke-NewConfig | Out-Null
+            Write-ColorOutput "" White
+            if (-not (Read-MenuReturn)) { return }
+            continue
+        }
+
+        # 字母 e：编辑模板描述（存于 models/descriptions/<name>.desc，不影响配置字段）
+        if ($choice -eq 'e' -or $choice -eq 'E') {
+            if ($files.Count -gt 0) {
+                $num = Read-Host "  选择模板 [1-$($files.Count)] › "
+                $idx = 0
+                if ([int]::TryParse($num, [ref]$idx) -and $idx -ge 1 -and $idx -le $files.Count) {
+                    $ename = [System.IO.Path]::GetFileNameWithoutExtension($files[$idx - 1])
+                    $cur = Get-TemplateDescription -Name $ename -DescriptionsDir $script:DescriptionsDir
+                    Write-ColorOutput "  当前描述：$(if ($cur) { $cur } else { '（无）' })" DarkGray
+                    $edesc = Read-Host '  输入新描述（空回车清除）› '
+                    if (-not [string]::IsNullOrWhiteSpace($edesc)) {
+                        Set-TemplateDescription -Name $ename -Description $edesc -DescriptionsDir $script:DescriptionsDir | Out-Null
+                        Write-ColorOutput "  ✅ 描述已更新" Green
+                    } else {
+                        Set-TemplateDescription -Name $ename -Description '' -DescriptionsDir $script:DescriptionsDir | Out-Null
+                        Write-ColorOutput "  已清除描述" DarkGray
+                    }
+                } else {
+                    Write-ColorOutput "  ❌ 无效: $num" Yellow
+                }
+            }
             Write-ColorOutput "" White
             if (-not (Read-MenuReturn)) { return }
             continue
@@ -1368,7 +1435,7 @@ function Invoke-Uninstall {
 # === 主分发 ===
 function Show-HelpText {
     Write-ColorOutput "用法: codex-swap [use <name>] | [list] | [current] | [update] | [doctor] | [uninstall] | [help]" White
-    Write-ColorOutput "      菜单内: n 新建配置 · o 打开模板目录 · u 检查并升级" DarkGray
+    Write-ColorOutput "      菜单内: n 新建配置 · e 编辑描述 · o 打开模板目录 · u 检查并升级" DarkGray
     Write-ColorOutput "      首次运行（模板目录为空）自动进入初始化向导" DarkGray
 }
 
@@ -1413,6 +1480,8 @@ Export-ModuleMember -Function @(
     'Invoke-Uninstall',
     'Get-EffectiveProvider',
     'Test-TemplateName',
+    'Get-TemplateDescription',
+    'Set-TemplateDescription',
     'Get-TemplateFingerprint',
     'Get-CurrentFingerprint',
     'Resolve-ActiveMarkers',

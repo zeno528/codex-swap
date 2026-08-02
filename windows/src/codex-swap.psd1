@@ -1,6 +1,6 @@
 ﻿@{
     RootModule        = 'codex-swap.psm1'
-    ModuleVersion     = '0.2.67'
+    ModuleVersion     = '0.2.68'
     GUID              = '3a7c9f2e-5b4d-4a1c-9e8f-6d2b7a4c1e50'
     Author            = 'Scott Z'
     CompanyName       = 'zeno528'
@@ -11,6 +11,8 @@
         'Invoke-CodexSwap',
         'Get-EffectiveProvider',
         'Test-TemplateName',
+        'Get-TemplateDescription',
+        'Set-TemplateDescription',
         'Get-TemplateFingerprint',
         'Get-CurrentFingerprint',
         'Resolve-ActiveMarkers',

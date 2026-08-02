@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.67"
+VERSION="0.2.68"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -20,6 +20,7 @@ CONFIG="$CODEX_HOME/config.toml"
 AUTH_FILE="$CODEX_HOME/auth.json"
 MODELS_DIR="$CODEX_HOME/models"
 STATE_DIR="$CODEX_HOME/model-states"
+DESC_DIR="$MODELS_DIR/descriptions"
 MODELS_JSON="$CODEX_HOME/models.json"
 DEEPSEEK_MIN_CODEX="0.144.0"
 UPDATED=false
@@ -281,13 +282,14 @@ read_secret() {
 
 table_row() {
     local num="$1" status="$2" name="$3" model="$4" provider="$5" color="$6"
-    local name_width="${7:-16}"
+    local name_width="${7:-16}" desc="$8" desc_width="${9:-26}"
     printf '  '
     table_cell_center "$num" 4 "$color"
     table_cell_center "$status" 6 "$color"
     table_cell "$name" "$name_width" "$color"
     table_cell "$model" 26 "$color"
     table_cell "$provider" 14 "$color"
+    table_cell "$desc" "$desc_width" "$color"
     printf "${DGRAY}│${C}\n"
 }
 
@@ -317,8 +319,8 @@ cmd_list() {
         fi
     done
 
-    # 名称列自适应：表头与所有模板名的最大显示宽度，上限 32
-    local name_width=2 w
+    # 名称列自适应：表头（“名称”宽 4）与所有模板名的最大显示宽度，上限 32
+    local name_width=4 w
     for f in "$MODELS_DIR"/*.toml; do
         [ -f "$f" ] || continue
         w=$(display_width "$(basename "$f" .toml)")
@@ -327,15 +329,18 @@ cmd_list() {
     [ "$name_width" -gt 32 ] && name_width=32
 
     printf "${BOLD_CYAN}  🔍 模型配置${C}\n"
-    table_rule '╭' '┬' '╮' 4 6 "$name_width" 26 14
-    table_row '编号' '状态' '名称' '模型' '供应商' "$BOLD_CYAN" "$name_width"
-    table_rule '├' '┼' '┤' 4 6 "$name_width" 26 14
+    table_rule '╭' '┬' '╮' 4 6 "$name_width" 26 14 26
+    table_row '编号' '状态' '名称' '模型' '供应商' "$BOLD_CYAN" "$name_width" '描述'
+    table_rule '├' '┼' '┤' 4 6 "$name_width" 26 14 26
 
-    local i=0 name status color
+    local i=0 name status color desc
     for f in "$MODELS_DIR"/*.toml; do
         [ -f "$f" ] || continue
         i=$((i+1))
         name=$(basename "$f" .toml)
+        desc=""
+        [ -f "$DESC_DIR/$name.desc" ] && desc=$(head -n1 "$DESC_DIR/$name.desc")
+        desc="${desc:--}"
         model=$(get_field "$f" model)
         provider=$(effective_provider "$(get_field "$f" model_provider)")
         status=''
@@ -348,9 +353,9 @@ cmd_list() {
             status='✅'
             color="$BOLD_GREEN"
         fi
-        table_row "$i" "$status" "$name" "${model:--}" "$(provider_icon "$provider" "$model")${provider:--}" "$color" "$name_width"
+        table_row "$i" "$status" "$name" "${model:--}" "$(provider_icon "$provider" "$model")${provider:--}" "$color" "$name_width" "$desc"
     done
-    table_rule '╰' '┴' '╯' 4 6 "$name_width" 26 14
+    table_rule '╰' '┴' '╯' 4 6 "$name_width" 26 14 26
 }
 
 cmd_use() {
@@ -470,7 +475,7 @@ cmd_doctor() {
 
 show_help() {
     echo "用法: codex-swap [use <name>] | [list] | [current] | [update] | [doctor] | [uninstall] | [help]"
-    echo "      菜单内: n 新建配置 · o 打开模板目录 · u 检查并升级"
+    echo "      菜单内: n 新建配置 · e 编辑描述 · o 打开模板目录 · u 检查并升级"
     echo "      首次运行（模板目录为空）自动进入初始化向导"
 }
 
@@ -780,7 +785,7 @@ wizard_write_models_json() {
 # 因此播种无需选模型：默认 Flash 作为 config 种子，之后可在 Codex 内用
 # /model 或 --model 切换模型。
 wizard_builtin_template() {
-    local name="deepseek" key ans input
+    local name="deepseek" key ans input desc
     wizard_divider
     printf "  ${CYAN}🐳 DeepSeek 官方接入配置${C}\n"
     printf "  ${DGRAY}写入 models.json · 默认 V4-Flash · 原配置自动备份可随时切回${C}\n"
@@ -820,8 +825,19 @@ wizard_builtin_template() {
         fi
     done
 
+    wizard_divider
+    printf "  ${CYAN}💬 模板描述${C}\n"
+    printf "  ${DGRAY}说明这个配置的用途，可留空跳过${C}\n"
+    read -r -p "  描述 › " desc || { printf "\n"; return 1; }
+
     mkdir -p "$MODELS_DIR"
     wizard_write_template "$name" "$TEMPLATE_DEEPSEEK" "$key"
+    if [ -n "$desc" ]; then
+        mkdir -p "$DESC_DIR"
+        printf '%s\n' "$desc" > "$DESC_DIR/$name.desc"
+    else
+        rm -f "$DESC_DIR/$name.desc"
+    fi
     wizard_write_models_json
 
     wizard_divider
@@ -906,11 +922,11 @@ cmd_menu() {
         cmd_list
         local files=("$MODELS_DIR"/*.toml) prompt
         if [ -f "${files[0]:-}" ]; then
-            printf "${DGRAY}  操作：N 新建配置 · U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出${C}\n"
+            printf "${DGRAY}  操作：N 新建配置 · E 编辑描述 · U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出${C}\n"
             echo ""
             prompt="  选择模型 [1-${#files[@]}] › "
         else
-            prompt="  操作：N 新建配置 · U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出 › "
+            prompt="  操作：N 新建配置 · E 编辑描述 · U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出 › "
         fi
         read -r -p "$prompt" choice || break
         case "$choice" in
@@ -918,6 +934,31 @@ cmd_menu() {
             "" ) continue ;;
             n|N)
                 cmd_new_config || true
+                wait_for_menu "  按回车返回菜单，q 退出 › " || return 0
+                continue
+                ;;
+            e|E)
+                if [ -f "${files[0]:-}" ]; then
+                    local ename edesc num
+                    read -r -p "  选择模板 [1-${#files[@]}] › " num || { printf "\n"; break; }
+                    if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#files[@]}" ]; then
+                        ename=$(basename "${files[$((num-1))]}" .toml)
+                        edesc=""
+                        [ -f "$DESC_DIR/$ename.desc" ] && edesc=$(head -n1 "$DESC_DIR/$ename.desc")
+                        printf "  ${DGRAY}当前描述：${edesc:-（无）}${C}\n"
+                        read -r -p "  输入新描述（空回车清除）› " edesc || { printf "\n"; break; }
+                        if [ -n "$edesc" ]; then
+                            mkdir -p "$DESC_DIR"
+                            printf '%s\n' "$edesc" > "$DESC_DIR/$ename.desc"
+                            printf "  ${GREEN}✅ 描述已更新${C}\n"
+                        else
+                            rm -f "$DESC_DIR/$ename.desc"
+                            printf "  ${DGRAY}已清除描述${C}\n"
+                        fi
+                    else
+                        warn "  ❌ 无效: $num"
+                    fi
+                fi
                 wait_for_menu "  按回车返回菜单，q 退出 › " || return 0
                 continue
                 ;;

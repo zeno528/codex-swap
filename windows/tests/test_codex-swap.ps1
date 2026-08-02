@@ -296,6 +296,8 @@ Assert-True ($moduleText -match 'Write-WizardDivider') 'psm1 含向导步骤分�
 Assert-True ($moduleText -match '🔍 模型配置') '菜单表格含模型配置标题（与 Linux 对齐）'
 Assert-True ($moduleText -match '\$esc\[37m') '未激活行文本使用亮色'
 Assert-True ($moduleText -match '\$nameWidth') '名称列宽自适应（表头与模板名取最大，上限 32）'
+Assert-True ($moduleText -match 'Get-TemplateDescription') 'psm1 含描述读取函数'
+Assert-True ($moduleText -match "choice -eq 'e'") '菜单含 e 编辑描述入口'
 Assert-True ($moduleText -notmatch '\]8;;') 'API Key 链接为纯文本（与仓库链接一致，由终端自动识别）'
 Assert-True ($moduleText -match 'https://platform\.deepseek\.com/api_keys') 'API Key 链接带 https:// 协议头'
 Assert-True ($moduleText -match '你的 DeepSeek API Key') '空密钥时写入官方占位符'
@@ -322,6 +324,19 @@ try {
     Assert-True ($c -match 'sk-test-default-key-123456789') '默认模板写入 API Key'
     Assert-True ($c -match 'model_catalog_json') '默认模板引用官方 models.json'
 } finally { Remove-Item $tmpN -Recurse -Force -ErrorAction SilentlyContinue }
+
+Write-Host "`n=== Test 19: 模板描述读写（descriptions/ 子目录） ===" -ForegroundColor Cyan
+$tmpD = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $tmpD | Out-Null
+try {
+    Assert-True ((Get-TemplateDescription -Name 'gpt' -DescriptionsDir $tmpD) -eq '') '无描述文件返回空'
+    $p = Set-TemplateDescription -Name 'gpt' -Description '日常编码' -DescriptionsDir $tmpD
+    Assert-True ([System.IO.File]::Exists($p)) '描述文件已写入'
+    Assert-True ((Get-TemplateDescription -Name 'gpt' -DescriptionsDir $tmpD) -eq '日常编码') '读回描述'
+    Set-TemplateDescription -Name 'gpt' -Description '' -DescriptionsDir $tmpD | Out-Null
+    Assert-True (-not [System.IO.File]::Exists($p)) '空描述清除文件'
+    Assert-True ((Get-TemplateDescription -Name 'gpt' -DescriptionsDir $tmpD) -eq '') '清除后返回空'
+} finally { Remove-Item $tmpD -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== 总结 ===" -ForegroundColor Cyan
 Write-Host "通过: $pass" -ForegroundColor Green
