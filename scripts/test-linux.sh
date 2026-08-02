@@ -35,7 +35,6 @@ output="$(bash linux/codex-switch use deepseek)"
 grep -q '已切换至 deepseek' <<< "$output"
 grep -q 'trusted_project = "test-project"' "$CODEX_HOME/model-states/gpt.toml"
 cmp "$test_root/deepseek-before.toml" "$CODEX_HOME/config.toml"
-test "$(find "$CODEX_HOME/backups_model" -name '*.toml' | wc -l)" -ge 2
 
 # === auth.json 快照链路 ===
 printf '%s\n' '{ "token": "test-token-deepseek-auth" }' > "$CODEX_HOME/models/deepseek.auth.json"
@@ -57,7 +56,6 @@ grep -q 'test-token-deepseek-auth' "$CODEX_HOME/auth.json"
 output="$(bash linux/codex-switch use gpt)"
 grep -q 'auth.json 已同步（gpt）' <<< "$output"
 grep -q 'test-token-gpt-auth-grown' "$CODEX_HOME/auth.json"
-test "$(find "$CODEX_HOME/backups_model" -name 'auth.*.json' | wc -l)" -ge 1
 
 # 无 auth 记录的模型：切入清空防串用；切回时 auth 从快照恢复
 printf '%s\n' 'model = "claude-4"' 'model_provider = "anthropic"' > "$CODEX_HOME/models/claude.toml"

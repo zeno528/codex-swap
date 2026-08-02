@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     删除启动器 ~/.local/bin/codex-switch.cmd 和程序目录 ~/.local/bin/codex-switch。
-    数据目录 ~/.codex（models/model-states/backups_model）不受影响。
+    数据目录 ~/.codex（models/model-states）不受影响。
 
 .EXAMPLE
     .\windows\uninstall.ps1

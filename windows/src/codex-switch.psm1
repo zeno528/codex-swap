@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.37'
+$script:ScriptVersion = '0.2.38'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-switch'
 $script:ReleaseAsset   = 'codex-switch-windows.zip'
@@ -19,7 +19,6 @@ $script:CodexHome  = Get-CodexHome
 $script:ConfigPath = Join-Path $script:CodexHome 'config.toml'
 $script:AuthPath   = Join-Path $script:CodexHome 'auth.json'
 $script:ModelsDir  = Join-Path $script:CodexHome 'models'
-$script:BackupDir  = Join-Path $script:CodexHome 'backups_model'
 $script:StateDir   = Join-Path $script:CodexHome 'model-states'
 $script:ModelsJson = Join-Path $script:CodexHome 'models.json'
 $script:DeepseekMinCodex = '0.144.0'
@@ -250,30 +249,6 @@ function Get-SwitchAuth {
         }
     }
     return @{ Source = $null; Content = $null }
-}
-
-# === 备份 ===
-function Backup-Config {
-    if (-not [System.IO.Directory]::Exists($script:BackupDir)) {
-        [System.IO.Directory]::CreateDirectory($script:BackupDir) | Out-Null
-    }
-    $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss-fffffff'
-    $backupPath = Join-Path $script:BackupDir "config.$timestamp.toml"
-    [System.IO.File]::Copy($script:ConfigPath, $backupPath, $true)
-    if ([System.IO.File]::Exists($script:AuthPath)) {
-        [System.IO.File]::Copy($script:AuthPath, (Join-Path $script:BackupDir "auth.$timestamp.json"), $true)
-    }
-    $files = [System.IO.Directory]::GetFiles($script:BackupDir, 'config.*.toml') |
-        Sort-Object { [System.IO.File]::GetLastWriteTime($_) } -Descending
-    if ($files.Count -gt 5) {
-        $files | Select-Object -Skip 5 | ForEach-Object {
-            $bts = [System.IO.Path]::GetFileNameWithoutExtension($_).Substring('config.'.Length)
-            $authBak = Join-Path $script:BackupDir "auth.$bts.json"
-            if ([System.IO.File]::Exists($authBak)) { [System.IO.File]::Delete($authBak) }
-            [System.IO.File]::Delete($_)
-        }
-    }
-    return $backupPath
 }
 
 # === 内置模板：🐳 DeepSeek-V4-Flash ===
@@ -615,7 +590,7 @@ function Invoke-Use {
             Write-ColorOutput "🔑 已保存 $sourceName 的 auth 状态" DarkGray
         }
     } else {
-        Write-ColorOutput "⚠️ 当前 config 匹配不到任何模板，跳过状态保存（本次配置仍会备份）" Yellow
+        Write-ColorOutput "⚠️ 当前 config 匹配不到任何模板，跳过状态保存" Yellow
     }
 
     # 2. 目标已激活：无需切换
@@ -627,11 +602,7 @@ function Invoke-Use {
     # 3. 目标内容：优先恢复它的状态，首次才用模板播种
     $switch = Get-SwitchContent -Name $Name -ModelsDir $script:ModelsDir -StateDir $script:StateDir
 
-    # 4. 备份
-    $backupPath = Backup-Config
-    Write-ColorOutput "📦 已备份 → $backupPath" DarkGray
-
-    # 5. 原子写入：整个 config.toml 被目标内容覆盖
+    # 4. 原子写入：整个 config.toml 被目标内容覆盖
     $newContent = ($switch.Content.TrimEnd()) + "`n"
     $tmp = "$($script:ConfigPath).tmp"
     try {

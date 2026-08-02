@@ -5,11 +5,10 @@
 # 机制与 Windows 版一致：模板播种 + 状态恢复
 #   ~/.codex/models/<name>.toml        模板（首次播种）
 #   ~/.codex/model-states/<name>.toml  各模型最新状态
-#   ~/.codex/backups_model/            切前备份（保留 5 份）
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.37"
+VERSION="0.2.38"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-switch"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -22,7 +21,6 @@ CONFIG="$CODEX_HOME/config.toml"
 AUTH_FILE="$CODEX_HOME/auth.json"
 MODELS_DIR="$CODEX_HOME/models"
 STATE_DIR="$CODEX_HOME/model-states"
-BACKUP_DIR="$CODEX_HOME/backups_model"
 MODELS_JSON="$CODEX_HOME/models.json"
 DEEPSEEK_MIN_CODEX="0.144.0"
 UPDATED=false
@@ -317,31 +315,13 @@ cmd_use() {
     local content="$tpl" mode="模板初始化"
     [ -f "$STATE_DIR/$name.toml" ] && { content="$STATE_DIR/$name.toml"; mode="状态恢复"; }
 
-    # 3. 备份（config 与 auth 同时间戳，保留 5 份以 config 为准）
-    mkdir -p "$BACKUP_DIR"
-    local ts bak
-    ts="$(date +%Y%m%d-%H%M%S-%N)"
-    bak="$BACKUP_DIR/config.$ts.toml"
-    cp "$CONFIG" "$bak"
-    [ -f "$AUTH_FILE" ] && cp "$AUTH_FILE" "$BACKUP_DIR/auth.$ts.json"
-    local backups=() backup
-    mapfile -t backups < <(find "$BACKUP_DIR" -maxdepth 1 -type f -name 'config.*.toml' -printf '%f\n' | sort -r)
-    if [ "${#backups[@]}" -gt 5 ]; then
-        for backup in "${backups[@]:5}"; do
-            local bts="${backup#config.}"
-            bts="${bts%.toml}"
-            rm -f "$BACKUP_DIR/$backup" "$BACKUP_DIR/auth.$bts.json"
-        done
-    fi
-    printf "${DGRAY}  📦 已备份：%s${C}\n" "$(basename "$bak")"
-
-    # 4. 原子写入
+    # 3. 原子写入
     local tmp="$CONFIG.tmp"
     cp "$content" "$tmp"
     [ -s "$tmp" ] || fail "原子写校验失败：临时文件为空"
     mv "$tmp" "$CONFIG"
 
-    # 4.5 同步 auth.json（内容永不打印；无记录则清空防凭据串用）
+    # 4. 同步 auth.json（内容永不打印；无记录则清空防凭据串用）
     local auth_src
     auth_src="$(get_switch_auth "$name")"
     if [ -n "$auth_src" ]; then

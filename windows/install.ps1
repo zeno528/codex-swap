@@ -6,7 +6,7 @@
 .DESCRIPTION
     从 GitHub Release 下载 codex-switch-windows.zip，安装到 ~/.local/bin/codex-switch，
     并在 ~/.local/bin 生成 codex-switch.cmd 启动器（该目录需在 PATH 中，缺失则自动添加）。
-    数据目录 ~/.codex（models/model-states/backups_model）不受安装/卸载影响。
+    数据目录 ~/.codex（models/model-states）不受安装/卸载影响。
 
     一行安装（PowerShell 7）：
         irm https://raw.githubusercontent.com/zeno528/codex-switch/main/windows/install.ps1 | iex

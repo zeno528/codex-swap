@@ -31,13 +31,12 @@ auth.json ◄──────────────── model-states/<targ
                             （均无 → 清空 auth.json 防凭据串用）
 ```
 
-`use <name>` 五步：
+`use <name>` 四步：
 
-1. **识别源**：`Resolve-ActiveMarkers` 两阶段 — model+provider 匹配 → 多命中时按 token 指纹（前6|后6）精筛
+1. **识别源**：`Resolve-ActiveMarkers` — model+provider 匹配即激活
 2. **存源状态**：`Save-ModelState` 原样拷贝；`Save-ModelAuth` 无条件同步 auth 快照（auth.json 不存在则删除旧快照记录空态）
 3. **取目标**：`Get-SwitchContent` 状态优先、模板兜底；auth 同理由 `Get-SwitchAuth` 解析
-4. **备份**：`Backup-Config` → `backups_model/`（config + auth 同时间戳，保留 5 份以 config 为准，过期时配套删除）
-5. **原子写**：config 与 auth.json 均 tmp → 校验非空 → Move 覆盖，失败删 tmp 回滚；auth 内容永不打印；目标无 auth 记录时清空 auth.json（防凭据串用，切回时从快照还原）
+4. **原子写**：config 与 auth.json 均 tmp → 校验非空 → Move 覆盖，失败删 tmp 回滚；auth 内容永不打印；目标无 auth 记录时清空 auth.json（防凭据串用，切回时从快照还原）
 
 ## 模块结构
 
@@ -71,7 +70,7 @@ Windows 分支                 Linux/WSL2 分支（独立实现，零共享代�
 ├── windows/install.ps1      └── linux/uninstall.sh
 ├── windows/uninstall.ps1
 ├── windows/tests/
-└── 数据机制完全一致: models/ + model-states/ + backups_model/
+└── 数据机制完全一致: models/ + model-states/
 ```
 
 ## 版本管理
