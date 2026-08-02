@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.66'
+$script:ScriptVersion = '0.2.67'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -1074,7 +1074,14 @@ function Invoke-Menu {
             Write-Host "  $esc[1;38;2;63;174;194m🔍 模型配置$esc[0m"
             $headers = @('编号', '状态', '名称', '模型', '供应商')
             $keys    = @('Num',  'Status', 'Name', 'Model', 'Provider')
-            $widths  = @(4, 6, 16, 26, 14)
+            # 名称列自适应：表头与所有模板名的最大显示宽度，上限 32
+            $nameWidth = Get-DisplayWidth '名称'
+            foreach ($r in $rows) {
+                $w = Get-DisplayWidth ([string]$r.Name)
+                if ($w -gt $nameWidth) { $nameWidth = $w }
+            }
+            if ($nameWidth -gt 32) { $nameWidth = 32 }
+            $widths  = @(4, 6, $nameWidth, 26, 14)
             $colCount = $headers.Count
             $esc = [char]27
             $gray     = "$esc[90m"
@@ -1094,6 +1101,14 @@ function Invoke-Menu {
                 $sb = "  $gray│$valColor"
                 for ($i = 0; $i -lt $colCount; $i++) {
                     $val = [string]$Values[$i]
+                    # 与 Linux table_cell 一致：超宽值截断为 ...
+                    if ((Get-DisplayWidth $val) -gt $widths[$i]) {
+                        $limit = $widths[$i] - 3
+                        while ((Get-DisplayWidth $val) -gt $limit -and $val.Length -gt 0) {
+                            $val = $val.Substring(0, $val.Length - 1)
+                        }
+                        $val += '...'
+                    }
                     $pad = $widths[$i] - (Get-DisplayWidth $val)
                     if ($pad -lt 0) { $pad = 0 }
                     if ($i -eq 0 -or $i -eq 1) {

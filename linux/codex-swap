@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.66"
+VERSION="0.2.67"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -281,10 +281,11 @@ read_secret() {
 
 table_row() {
     local num="$1" status="$2" name="$3" model="$4" provider="$5" color="$6"
+    local name_width="${7:-16}"
     printf '  '
     table_cell_center "$num" 4 "$color"
     table_cell_center "$status" 6 "$color"
-    table_cell "$name" 16 "$color"
+    table_cell "$name" "$name_width" "$color"
     table_cell "$model" 26 "$color"
     table_cell "$provider" 14 "$color"
     printf "${DGRAY}│${C}\n"
@@ -316,10 +317,19 @@ cmd_list() {
         fi
     done
 
+    # 名称列自适应：表头与所有模板名的最大显示宽度，上限 32
+    local name_width=2 w
+    for f in "$MODELS_DIR"/*.toml; do
+        [ -f "$f" ] || continue
+        w=$(display_width "$(basename "$f" .toml)")
+        [ "$w" -gt "$name_width" ] && name_width=$w
+    done
+    [ "$name_width" -gt 32 ] && name_width=32
+
     printf "${BOLD_CYAN}  🔍 模型配置${C}\n"
-    table_rule '╭' '┬' '╮' 4 6 16 26 14
-    table_row '编号' '状态' '名称' '模型' '供应商' "$BOLD_CYAN"
-    table_rule '├' '┼' '┤' 4 6 16 26 14
+    table_rule '╭' '┬' '╮' 4 6 "$name_width" 26 14
+    table_row '编号' '状态' '名称' '模型' '供应商' "$BOLD_CYAN" "$name_width"
+    table_rule '├' '┼' '┤' 4 6 "$name_width" 26 14
 
     local i=0 name status color
     for f in "$MODELS_DIR"/*.toml; do
@@ -338,9 +348,9 @@ cmd_list() {
             status='✅'
             color="$BOLD_GREEN"
         fi
-        table_row "$i" "$status" "$name" "${model:--}" "$(provider_icon "$provider" "$model")${provider:--}" "$color"
+        table_row "$i" "$status" "$name" "${model:--}" "$(provider_icon "$provider" "$model")${provider:--}" "$color" "$name_width"
     done
-    table_rule '╰' '┴' '╯' 4 6 16 26 14
+    table_rule '╰' '┴' '╯' 4 6 "$name_width" 26 14
 }
 
 cmd_use() {

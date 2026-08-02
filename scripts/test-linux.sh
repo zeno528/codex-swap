@@ -34,6 +34,18 @@ printf '%s\n' 'model = "gpt-5.6-sol"' > "$fallback_home/models/openai-alt.toml"
 output="$(CODEX_HOME="$fallback_home" bash linux/codex-swap list)"
 ! grep -q '✅' <<< "$output"
 
+# 名称列自适应：长名称完整显示，超过上限截断为 ...
+long_home="$test_root/longname"
+mkdir -p "$long_home/models" "$long_home/model-states"
+printf '%s\n' 'model = "gpt-5.6-terra"' > "$long_home/models/long-template-name-123456789.toml"
+printf '%s\n' 'model = "gpt-5.6-terra"' > "$long_home/config.toml"
+output="$(CODEX_HOME="$long_home" bash linux/codex-swap list)"
+grep -q 'long-template-name-123456789' <<< "$output"
+printf '%s\n' 'model = "gpt-5.6-terra"' > "$long_home/models/very-long-template-name-1234567890.toml"
+output="$(CODEX_HOME="$long_home" bash linux/codex-swap list)"
+if grep -q 'very-long-template-name-1234567890' <<< "$output"; then exit 1; fi
+grep -q '\.\.\.' <<< "$output"
+
 output="$(bash linux/codex-swap use gpt)"
 grep -q '已切换至 gpt' <<< "$output"
 grep -q '📋 当前配置 · 4 行' <<< "$output"

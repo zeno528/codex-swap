@@ -295,6 +295,7 @@ Assert-True ($moduleText -match "choice -eq 'n'") '菜单含 n 新建配置入�
 Assert-True ($moduleText -match 'Write-WizardDivider') 'psm1 含向导步骤分割线函数'
 Assert-True ($moduleText -match '🔍 模型配置') '菜单表格含模型配置标题（与 Linux 对齐）'
 Assert-True ($moduleText -match '\$esc\[37m') '未激活行文本使用亮色'
+Assert-True ($moduleText -match '\$nameWidth') '名称列宽自适应（表头与模板名取最大，上限 32）'
 Assert-True ($moduleText -notmatch '\]8;;') 'API Key 链接为纯文本（与仓库链接一致，由终端自动识别）'
 Assert-True ($moduleText -match 'https://platform\.deepseek\.com/api_keys') 'API Key 链接带 https:// 协议头'
 Assert-True ($moduleText -match '你的 DeepSeek API Key') '空密钥时写入官方占位符'
