@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.56"
+VERSION="0.2.57"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -363,7 +363,7 @@ cmd_use() {
 
     # 5. 输出（掩码密钥）
     local lines
-    lines=$(wc -l < "$CONFIG")
+    lines=$(wc -l < "$CONFIG" | tr -d '[:space:]')
     printf "${GREEN}  ✅ 已切换至 %s${C}\n" "$name"
     printf "${DGRAY}  来源：%s${C}\n\n" "$mode"
     printf "${BOLD_CYAN}  📋 当前配置 · %s 行${C}\n" "$lines"

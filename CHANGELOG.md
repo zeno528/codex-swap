@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.57] - 2026-08-02
+
+- fix(macos): 规范化配置行数输出
+
+
 ## [0.2.56] - 2026-08-02
 
 - feat(release): 增加统一 Linux/macOS 发行包
