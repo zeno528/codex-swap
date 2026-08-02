@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.54'
+$script:ScriptVersion = '0.2.55'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -694,10 +694,12 @@ function Get-ProviderIcon {
     return ''
 }
 
-# === 向导：检测 codex CLI（未安装返回安装命令列表，已安装返回 $null） ===
+# === 向导：检测 Codex 安装（数据目录存在即视为已安装） ===
 # Windows: 官方独立安装器 install.ps1；其他平台（pwsh on Linux/WSL）: 官方 install.sh
 function Get-CodexInstallHint {
+    param([string]$CodexHome = (Get-CodexHome))
     if ($null -ne (Get-Command codex -ErrorAction SilentlyContinue)) { return $null }
+    if ([System.IO.Directory]::Exists($CodexHome)) { return $null }
     if ($IsWindows) {
         return @('powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"')
     }

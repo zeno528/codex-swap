@@ -187,13 +187,18 @@ try {
 } finally { Remove-Item $tmpAuth2 -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host "`n=== Test 13: 首次向导基础（安装提示/版本检查/🐳 命名） ===" -ForegroundColor Cyan
-# 无 codex 时给出官方安装命令（CI 环境无 codex 可断言非空）
+# 无 Codex 数据目录且无 CLI 时给出官方安装命令（CI 环境无 codex 可断言非空）
 $hint = Get-CodexInstallHint
 if ($null -ne $hint) {
     Assert-True (($hint -join ' ') -match 'codex') '安装提示包含官方 codex 命令'
 } else {
     Assert-True $true '本机已装 codex，跳过安装提示断言'
 }
+$existingCodexHome = Join-Path ([System.IO.Path]::GetTempPath()) ("cm-test-" + [guid]::NewGuid().ToString('N'))
+try {
+    New-Item -ItemType Directory -Path $existingCodexHome | Out-Null
+    Assert-True ($null -eq (Get-CodexInstallHint -CodexHome $existingCodexHome)) '已有 .codex 目录时不要求 CLI 安装'
+} finally { Remove-Item $existingCodexHome -Recurse -Force -ErrorAction SilentlyContinue }
 $vt = Test-CodexVersion
 Assert-True ($null -eq $vt -or $vt -is [bool]) 'Test-CodexVersion 返回 $null 或 bool'
 Assert-True ((Get-ProviderIcon 'deepseek' 'x') -eq '🐳 ') 'deepseek 供应商显示 🐳'
