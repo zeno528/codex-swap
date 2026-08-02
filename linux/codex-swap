@@ -8,13 +8,12 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.52"
+VERSION="0.2.53"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
 ASSET_NAME="codex-swap-linux.zip"
 API_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
-VERSION_URL="https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/VERSION"
 
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 CONFIG="$CODEX_HOME/config.toml"
@@ -356,13 +355,15 @@ cmd_update() {
     UPDATED=false
     printf "${DGRAY}  🔎 检查更新 · 当前 v%s${C}\n" "$VERSION"
     local json url source_version
-    source_version=$(curl -fsSL "${VERSION_URL}?nocache=$(date +%s)" | tr -d '[:space:]') || fail "无法获取 VERSION（网络或 GitHub 限流）"
-    [[ "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "VERSION 格式无效: $source_version"
+    # 以 releases/latest 的 tag 为唯一更新依据：raw VERSION 有 CDN 缓存延迟，
+    # 发版后立即检查会拿到旧值误判"已是最新"（实测 0.2.52 发布后 raw 仍返回 0.2.51）
+    json=$(curl -fsSL -H 'User-Agent: codex-swap' "$API_URL") || fail "无法获取最新版本（网络或 GitHub 限流）"
+    source_version=$(printf '%s' "$json" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 | tr -d 'v')
+    [[ "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "无法获取有效 VERSION（网络或 GitHub 限流）"
     if ! ver_gt "$source_version" "$VERSION"; then
         printf "${GREEN}  ✅ 已是最新版本 v%s${C}\n" "$VERSION"; return
     fi
     printf "${YELLOW}  🚀 发现新版本 · v%s${C}\n" "$source_version"
-    json=$(curl -fsSL -H 'User-Agent: codex-swap' "$API_URL") || fail "无法获取最新版本（网络或 GitHub 限流）"
     url=$(printf '%s' "$json" | { grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*codex-swap-linux\.zip"' || true; } | head -n1 | sed 's/.*"\(http[^"]*\)".*/\1/')
     [ -n "$url" ] || fail "找不到资产 $ASSET_NAME"
 

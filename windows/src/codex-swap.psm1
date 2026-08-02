@@ -3,11 +3,10 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.52'
+$script:ScriptVersion = '0.2.53'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
-$script:VersionUrl     = "https://raw.githubusercontent.com/$($script:RepoOwner)/$($script:RepoName)/main/VERSION"
 $script:RepoUrl        = "https://github.com/$($script:RepoOwner)/$($script:RepoName)"
 
 function Get-CodexHome {
@@ -1151,17 +1150,6 @@ function Compare-Version {
 }
 
 # === 自更新：VERSION 是唯一版本源，Release 仅提供下载资产 ===
-function Get-SourceVersion {
-    try {
-        $uri = "$($script:VersionUrl)?nocache=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
-        $version = ([string](Invoke-RestMethod -Uri $uri -Headers @{ 'User-Agent' = 'codex-swap' } -TimeoutSec 15)).Trim()
-        if ($version -notmatch '^\d+\.\d+\.\d+$') { return $null }
-        return $version
-    } catch {
-        return $null
-    }
-}
-
 function Get-LatestReleaseInfo {
     try {
         $uri = "https://api.github.com/repos/$($script:RepoOwner)/$($script:RepoName)/releases/latest"
@@ -1173,10 +1161,16 @@ function Get-LatestReleaseInfo {
 
 function Invoke-Update {
     # 与 Linux cmd_update 一致：文案/颜色/顺序对齐
+    # 以 releases/latest 的 tag 为唯一更新依据：raw VERSION 有 CDN 缓存延迟，
+    # 发版后立即检查会拿到旧值误判"已是最新"（实测 0.2.52 发布后 raw 仍返回 0.2.51）
     Write-ColorOutput "  🔎 检查更新 · 当前 v$($script:ScriptVersion)" DarkGray
-    $sourceVersion = Get-SourceVersion
-    if ([string]::IsNullOrWhiteSpace($sourceVersion)) {
-        throw '无法获取有效 VERSION（网络问题或 GitHub 限流）'
+    $info = Get-LatestReleaseInfo
+    if ($null -eq $info) {
+        throw '无法获取最新版本（网络问题或 GitHub API 限流）'
+    }
+    $sourceVersion = ($info.tag_name -replace '^v', '').Trim()
+    if ($sourceVersion -notmatch '^\d+\.\d+\.\d+$') {
+        throw "无法获取有效 VERSION（tag: $($info.tag_name)）"
     }
     $cmp = Compare-Version -A $sourceVersion -B $script:ScriptVersion
     if ($cmp -le 0) {
@@ -1185,10 +1179,6 @@ function Invoke-Update {
     }
     Write-ColorOutput "  🚀 发现新版本 · v$sourceVersion" Yellow
 
-    $info = Get-LatestReleaseInfo
-    if ($null -eq $info) {
-        throw '无法获取最新版本（网络问题或 GitHub API 限流）'
-    }
     $asset = $info.assets | Where-Object { $_.name -eq $script:ReleaseAsset } | Select-Object -First 1
     if ($null -eq $asset) {
         throw "找不到资产 $($script:ReleaseAsset)"
