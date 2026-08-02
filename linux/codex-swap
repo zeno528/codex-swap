@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.63"
+VERSION="0.2.64"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -770,7 +770,7 @@ wizard_write_models_json() {
 # 因此播种无需选模型：默认 Flash 作为 config 种子，之后可在 Codex 内用
 # /model 或 --model 切换模型。
 wizard_builtin_template() {
-    local name="deepseek" key ans
+    local name="deepseek" key ans input
     wizard_divider
     printf "  ${CYAN}🐳 DeepSeek 官方接入配置${C}\n"
     printf "  ${DGRAY}默认 V4-Flash 模板；models.json 已含 V4-Flash/V4-Pro${C}\n"
@@ -782,6 +782,31 @@ wizard_builtin_template() {
     read_secret "  API Key › "
     key="$SECRET_INPUT"
 
+    wizard_divider
+    printf "  ${CYAN}📛 模板名称${C}\n"
+    printf "  ${DGRAY}默认 ${name} · 直接回车使用；重名时可覆盖或改名${C}\n"
+    while true; do
+        read -r -p "  名称 › " input || { printf "\n"; return 1; }
+        if [ -n "$input" ]; then
+            name="$input"
+        fi
+        if [[ ! "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+            printf "  ${YELLOW}⚠️ 名称仅支持字母/数字/-/_/.，且不能以 . 开头${C}\n"
+            continue
+        fi
+        if [ -f "$MODELS_DIR/$name.toml" ]; then
+            printf "  ${YELLOW}⚠️ 已存在同名模板：${name}.toml${C}\n"
+            read -r -p "  覆盖（o）或重新命名（r）？[o/r] › " ans || { printf "\n"; return 1; }
+            case "$ans" in
+                o|O) break ;;
+                r|R) continue ;;
+                *) printf "  ${YELLOW}无效选择，请输入 o 或 r${C}\n"; continue ;;
+            esac
+        else
+            break
+        fi
+    done
+
     mkdir -p "$MODELS_DIR"
     wizard_write_template "$name" "$TEMPLATE_DEEPSEEK" "$key"
     wizard_write_models_json
@@ -791,7 +816,7 @@ wizard_builtin_template() {
         printf "  ${DGRAY}未发现 config.toml，已直接初始化为 ${name}${C}\n"
         cp "$MODELS_DIR/$name.toml" "$CONFIG"
     else
-        read -r -p "  是否立即切换到 DeepSeek-V4-Flash？[y/N] › " ans || true
+        read -r -p "  是否立即切换到该模板（${name}）？[y/N] › " ans || true
         if [ "$ans" = y ] || [ "$ans" = Y ]; then
             cmd_use "$name" || true
         fi
@@ -802,15 +827,15 @@ wizard_builtin_template() {
 # === 向导：模型配置来源选择（首次向导与菜单“新建配置”共用） ===
 wizard_choose_source() {
     printf "  ${BOLD_CYAN}📦 模型配置来源${C}\n"
-    printf "  ${GREEN}1)${C} 我有模板 — 打开目录手动导入\n"
-    printf "  ${GREEN}2)${C} DeepSeek 官方接入配置 — 🐳\n"
+    printf "  ${GREEN}1)${C} DeepSeek 官方接入配置 — 🐳\n"
+    printf "  ${GREEN}2)${C} 我有模板 — 打开目录手动导入\n"
     printf "  ${DGRAY}q 取消${C}\n"
     local choice
     while true; do
         read -r -p "  选择 [1-2] › " choice || { printf "\n"; return 1; }
         case "$choice" in
-            1) wizard_import_template; return $? ;;
-            2) wizard_builtin_template; return $? ;;
+            1) wizard_builtin_template; return $? ;;
+            2) wizard_import_template; return $? ;;
             q|Q) printf "${DGRAY}  已取消${C}\n"; return 1 ;;
             *) printf "${YELLOW}  无效选择，请重试${C}\n" ;;
         esac

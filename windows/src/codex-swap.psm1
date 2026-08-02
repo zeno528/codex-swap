@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.63'
+$script:ScriptVersion = '0.2.64'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -44,6 +44,12 @@ function Get-EffectiveProvider {
     param([AllowEmptyString()] [string]$Provider)
     if ([string]::IsNullOrWhiteSpace($Provider)) { return 'openai' }
     return $Provider.Trim()
+}
+
+# === 工具：校验模板名称（用于 models/<name>.toml 文件名，禁止路径穿越） ===
+function Test-TemplateName {
+    param([Parameter(Mandatory)] [string]$Name)
+    return ($Name -match '^[A-Za-z0-9][A-Za-z0-9._-]*$')
 }
 
 # === 核心：从单个模板里提取 (model, model_provider, token 指纹) ===
@@ -830,6 +836,27 @@ function Invoke-BuiltinTemplate {
     Write-ColorOutput " 创建，可留空稍后手动填入模板" DarkGray
     $key = Read-Secret '  API Key › '
 
+    Write-WizardDivider
+    Write-ColorOutput "  📛 模板名称" Cyan
+    Write-ColorOutput "  默认 $name · 直接回车使用；重名时可覆盖或改名" DarkGray
+    while ($true) {
+        $input = Read-Host '  名称 › '
+        if (-not [string]::IsNullOrWhiteSpace($input)) { $name = $input.Trim() }
+        if (-not (Test-TemplateName -Name $name)) {
+            Write-ColorOutput "  ⚠️ 名称仅支持字母/数字/-/_/.，且不能以 . 开头" Yellow
+            continue
+        }
+        if ([System.IO.File]::Exists((Join-Path $script:ModelsDir "$name.toml"))) {
+            Write-ColorOutput "  ⚠️ 已存在同名模板：$name.toml" Yellow
+            $ans = Read-Host '  覆盖（o）或重新命名（r）？[o/r] › '
+            if ($ans -eq 'o' -or $ans -eq 'O') { break }
+            if ($ans -eq 'r' -or $ans -eq 'R') { continue }
+            Write-ColorOutput "  无效选择，请输入 o 或 r" Yellow
+            continue
+        }
+        break
+    }
+
     $path = Write-TemplateFile -Name $name -Content $script:TemplateDeepseek -ApiKey $key -ModelsDir $script:ModelsDir
     Write-ColorOutput "  ✅ 模板已创建：$path" Green
     $jsonPath = Write-ModelsJsonFile -Path $script:ModelsJson
@@ -841,7 +868,7 @@ function Invoke-BuiltinTemplate {
         $tpl = [System.IO.File]::ReadAllText($path, [System.Text.UTF8Encoding]::new($false))
         [System.IO.File]::WriteAllText($script:ConfigPath, $tpl, [System.Text.UTF8Encoding]::new($false))
     } else {
-        $ans = Read-Host '  是否立即切换到 DeepSeek-V4-Flash？[y/N] › '
+        $ans = Read-Host "  是否立即切换到该模板（$name）？[y/N] › "
         if ($ans -eq 'y' -or $ans -eq 'Y') { Invoke-Use -Name $name }
     }
     return $true
@@ -852,10 +879,10 @@ function Invoke-ChooseSource {
     Write-ColorOutput "  📦 模型配置来源" Cyan
     Write-ColorOutput "  " White -NoNewline
     Write-ColorOutput "1)" Green -NoNewline
-    Write-ColorOutput " 我有模板 — 打开目录手动导入" White
+    Write-ColorOutput " DeepSeek 官方接入配置 — 🐳" White
     Write-ColorOutput "  " White -NoNewline
     Write-ColorOutput "2)" Green -NoNewline
-    Write-ColorOutput " DeepSeek 官方接入配置 — 🐳" White
+    Write-ColorOutput " 我有模板 — 打开目录手动导入" White
     Write-ColorOutput "  q 取消" DarkGray
     while ($true) {
         $choice = Read-Host '  选择 [1-2] › '
@@ -864,8 +891,8 @@ function Invoke-ChooseSource {
             return $false
         }
         switch ($choice) {
-            '1' { return (Invoke-ImportTemplate) }
-            '2' { return (Invoke-BuiltinTemplate) }
+            '1' { return (Invoke-BuiltinTemplate) }
+            '2' { return (Invoke-ImportTemplate) }
         }
         Write-ColorOutput "  无效选择，请重试" Yellow
     }
@@ -1368,6 +1395,7 @@ Export-ModuleMember -Function @(
     'Invoke-CodexSwap',
     'Invoke-Uninstall',
     'Get-EffectiveProvider',
+    'Test-TemplateName',
     'Get-TemplateFingerprint',
     'Get-CurrentFingerprint',
     'Resolve-ActiveMarkers',
