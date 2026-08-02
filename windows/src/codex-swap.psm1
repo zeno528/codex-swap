@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.69'
+$script:ScriptVersion = '0.2.70'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -1375,26 +1375,32 @@ function Invoke-Update {
             throw "下载资产版本 v$packageVersion 与 VERSION v$sourceVersion 不一致"
         }
 
-        # 备份当前安装 → 替换 → 验证 → 清理
+        # 备份当前安装：逐文件复制备份。运行中的菜单进程会锁定安装目录的
+        # 重命名/删除（Rename-Item 报 Access denied），但允许文件复制与覆盖，
+        # 因此不再重命名整个目录。
         $old = "$root.old"
         if ([System.IO.Directory]::Exists($old)) { Remove-Item $old -Recurse -Force }
-        Rename-Item $root $old
+        [System.IO.Directory]::CreateDirectory((Join-Path $old 'src')) | Out-Null
+        [System.IO.Directory]::CreateDirectory((Join-Path $old 'bin')) | Out-Null
+        Copy-Item (Join-Path $root 'src\*') (Join-Path $old 'src') -Recurse -Force
+        Copy-Item (Join-Path $root 'bin\*') (Join-Path $old 'bin') -Recurse -Force
 
         try {
-            # 显式创建目标目录后逐项复制：避免 Copy-Item 通配符 + 目标目录不存在时的
-            # 已知 bug（"Container cannot be copied onto existing leaf item"，见 powershell/powershell#27478）
-            [System.IO.Directory]::CreateDirectory($root) | Out-Null
-            Copy-Item (Join-Path $extract 'src') (Join-Path $root 'src') -Recurse -Force
-            Copy-Item (Join-Path $extract 'bin') (Join-Path $root 'bin') -Recurse -Force
+            # 覆盖安装：目标目录已存在，用通配符逐项覆盖（避免 PowerShell#27478
+            # 的“容器复制到叶项”嵌套问题；正在执行的 ps1/psm1 允许被覆盖）
+            Copy-Item (Join-Path $extract 'src\*') (Join-Path $root 'src') -Recurse -Force
+            Copy-Item (Join-Path $extract 'bin\*') (Join-Path $root 'bin') -Recurse -Force
             Import-Module (Join-Path $root 'src\codex-swap.psm1') -Force -ErrorAction Stop
             # Import-Module -Force 会卸载当前正在运行的旧模块实例，模块私有函数
             # （Write-ColorOutput）随之失效；此处只能使用全局 cmdlet（Write-Host）
             Write-Host "  ✅ 已升级至 v$sourceVersion" -ForegroundColor Green
             Remove-Item $old -Recurse -Force
         } catch {
-            # 回滚
-            if ([System.IO.Directory]::Exists($root)) { Remove-Item $root -Recurse -Force }
-            Rename-Item $old $root
+            # 回滚：从备份逐文件复制还原
+            try {
+                Copy-Item (Join-Path $old 'src\*') (Join-Path $root 'src') -Recurse -Force
+                Copy-Item (Join-Path $old 'bin\*') (Join-Path $root 'bin') -Recurse -Force
+            } catch { }
             throw "升级失败，已回滚到原版本: $_"
         }
     } finally {

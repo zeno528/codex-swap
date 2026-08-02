@@ -166,6 +166,8 @@ $moduleText = [System.IO.File]::ReadAllText($modulePath, [System.Text.UTF8Encodi
 Assert-True ($moduleText -match 'tag_name' -and $moduleText -notmatch 'Get-SourceVersion') '更新决策以 releases/latest tag 为准（raw VERSION 有 CDN 缓存延迟）'
 Assert-True ($moduleText -match '下载资产版本 v\$packageVersion 与 VERSION v\$sourceVersion 不一致') '下载资产必须校验 VERSION'
 Assert-True ($moduleText -notmatch "Copy-Item \(Join-Path \$extract '\*'\)") '替换用显式建目录+逐项复制（避免 powershell/powershell#27478）'
+Assert-True ($moduleText -notmatch 'Rename-Item \$root \$old') '更新不再重命名安装目录（运行中进程会锁定目录）'
+Assert-True ($moduleText -match "Copy-Item \(Join-Path \`$extract 'src\\\*'\)") '更新用通配符逐项覆盖 src/'
 Assert-True ($moduleText -match '📋 当前配置 · \$lineCount 行') '切换预览标题显示配置行数'
 
 Write-Host "`n=== Test 11: Save-ModelAuth 保存/覆盖/删除空态 ===" -ForegroundColor Cyan
