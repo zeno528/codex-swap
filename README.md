@@ -8,7 +8,7 @@
 
 [![License](https://img.shields.io/badge/License-MIT-4CC61E)](LICENSE)
 ![平台](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-2B7489)
-![运行时](https://img.shields.io/badge/PowerShell%207%20%C2%B7%20Bash-8250DF)
+![运行时](https://img.shields.io/badge/PowerShell%205.1%2B%20%7C%207%20%E6%8E%A8%E8%8D%90%20%C2%B7%20Bash-8250DF)
 
 </div>
 
@@ -26,7 +26,7 @@ macOS 与 Linux 共用同一 bash 分支（零 Windows 依赖），系统自带 
 
 Release 页面会提供 `codex-swap-linux-macos.zip`，供 Linux、WSL2 与 macOS 共用。
 
-### 🪟 Windows · PowerShell 7
+### 🪟 Windows · PowerShell 5.1+（PowerShell 7 推荐）
 
 ```powershell
 irm https://raw.githubusercontent.com/zeno528/codex-swap/main/windows/install.ps1 | iex

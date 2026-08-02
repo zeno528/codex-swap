@@ -9,11 +9,19 @@ permissions:
   contents: write
 
 jobs:
-  test-windows:
+  test-windows-5-1:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Run tests (pwsh, Windows 分支)
+      - name: Run tests (PowerShell 5.1, Windows 分支)
+        shell: powershell
+        run: ./windows/tests/test_codex-swap.ps1
+
+  test-windows-7:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run tests (PowerShell 7, Windows 分支)
         shell: pwsh
         run: ./windows/tests/test_codex-swap.ps1
 
@@ -47,7 +55,7 @@ jobs:
         run: scripts/test-linux.sh
 
   create-release:
-    needs: [test-windows, test-linux, test-macos]
+    needs: [test-windows-5-1, test-windows-7, test-linux, test-macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -78,12 +86,12 @@ jobs:
           gh release create "$tag" codex-swap-windows.zip codex-swap-linux-macos.zip --target "$GITHUB_SHA" --title "$tag" --notes-file NOTES.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Prune old releases (仅保留最新 2 个)
+      - name: Prune old releases (仅保留最新 5 个)
         run: |
-          # 发行版界面最多保留最新 2 个 release：新版本发布时，第 3 个及更早的旧 release 被删除（tag 保留）
+          # 发行版界面最多保留最新 5 个 release：新版本发布时，第 6 个及更早的旧 release 被删除（tag 保留）
           gh release list --limit 100 \
             --json tagName,publishedAt \
-            --jq '[.[] | select(.publishedAt != null)] | sort_by(.publishedAt) | reverse | .[2:][] | .tagName' \
+            --jq '[.[] | select(.publishedAt != null)] | sort_by(.publishedAt) | reverse | .[5:][] | .tagName' \
             | while read -r old_tag; do
                 echo "  删除旧 Release: $old_tag"
                 gh release delete "$old_tag" --yes

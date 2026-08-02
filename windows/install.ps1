@@ -1,4 +1,4 @@
-#requires -Version 7.0
+#requires -Version 5.1
 <#
 .SYNOPSIS
     codex-swap Windows 安装器
@@ -8,7 +8,7 @@
     并在 ~/.local/bin 生成 codex-swap.cmd 启动器（该目录需在 PATH 中，缺失则自动添加）。
     数据目录 ~/.codex（models/model-states）不受安装/卸载影响。
 
-    一行安装（PowerShell 7）：
+    一行安装（PowerShell 5.1+，PowerShell 7 推荐）：
         irm https://raw.githubusercontent.com/zeno528/codex-swap/main/windows/install.ps1 | iex
 
     或下载后指定参数运行：
@@ -50,8 +50,9 @@ if ($Uninstall) {
     return
 }
 
-# ---------- 前置检查 ----------if ($PSVersionTable.PSVersion.Major -lt 7) {
-    Write-Bad "需要 PowerShell 7+（当前 $($PSVersionTable.PSVersion)），请先安装 pwsh"
+# ---------- 前置检查 ----------
+if ($PSVersionTable.PSVersion -lt [version]'5.1') {
+    Write-Bad "需要 PowerShell 5.1+（当前 $($PSVersionTable.PSVersion)）"
     exit 1
 }
 
@@ -81,7 +82,7 @@ $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-swap-install-" + [
 $zipPath = Join-Path $tmpDir $AssetName
 $extract = Join-Path $tmpDir 'extract'
 try {
-    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zipPath -TimeoutSec 120
+    Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -OutFile $zipPath -TimeoutSec 120
     Expand-Archive -Path $zipPath -DestinationPath $extract -Force
 
     # 校验结构
@@ -104,10 +105,10 @@ try {
     Import-Module (Join-Path $InstallRoot 'src\codex-swap.psm1') -Force -ErrorAction Stop
 
     # ---------- 启动器 + PATH ----------
-    $shim = "@echo off`r`nrem codex-swap launcher (Windows)`r`npwsh -NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\src\codex-swap.ps1`" %*`r`n"
+    $shim = "@echo off`r`nrem codex-swap launcher (Windows)`r`nwhere pwsh >nul 2>&1`r`nif not errorlevel 1 (`r`n    pwsh -NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\src\codex-swap.ps1`" %*`r`n) else (`r`n    powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\src\codex-swap.ps1`" %*`r`n)`r`n"
     [System.IO.File]::WriteAllText($ShimPath, $shim, [System.Text.UTF8Encoding]::new($false))
 
-    $swShim = "@echo off`r`nrem codex-swap launcher (Windows)`r`npwsh -NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\src\codex-swap.ps1`" %*`r`n"
+    $swShim = $shim
     if (-not (Test-Path $SwShimPath) -or ([System.IO.File]::ReadAllText($SwShimPath) -match 'codex-swap launcher')) {
         [System.IO.File]::WriteAllText($SwShimPath, $swShim, [System.Text.UTF8Encoding]::new($false))
     } else {

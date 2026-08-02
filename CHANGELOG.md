@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.58] - 2026-08-02
+
+- ✨ feat(win): 兼容 PowerShell 5.1，启动器优先 pwsh 回退 powershell.exe
+
+
 ## [0.2.57] - 2026-08-02
 
 - fix(macos): 规范化配置行数输出

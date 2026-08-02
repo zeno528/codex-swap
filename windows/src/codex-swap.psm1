@@ -1,18 +1,19 @@
-#requires -Version 7.0
+#requires -Version 5.1
 # codex-swap 核心模块
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.57'
+$script:ScriptVersion = '0.2.58'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
 $script:RepoUrl        = "https://github.com/$($script:RepoOwner)/$($script:RepoName)"
+$script:IsWindowsPlatform = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
 
 function Get-CodexHome {
     # 与 Linux 一致：CODEX_HOME 环境变量优先（测试/隔离依赖它），否则默认 ~/.codex
     if (-not [string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { return $env:CODEX_HOME }
-    $home = if ($IsWindows) { $env:USERPROFILE } else { $env:HOME }
+    $home = if ($script:IsWindowsPlatform) { $env:USERPROFILE } else { $env:HOME }
     return Join-Path $home '.codex'
 }
 
@@ -700,7 +701,7 @@ function Get-CodexInstallHint {
     param([string]$CodexHome = (Get-CodexHome))
     if ($null -ne (Get-Command codex -ErrorAction SilentlyContinue)) { return $null }
     if ([System.IO.Directory]::Exists($CodexHome)) { return $null }
-    if ($IsWindows) {
+    if ($script:IsWindowsPlatform) {
         return @('powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"')
     }
     return @('curl -fsSL https://chatgpt.com/codex/install.sh | sh')
@@ -773,7 +774,7 @@ function Invoke-ImportTemplate {
     if (-not [System.IO.Directory]::Exists($script:ModelsDir)) {
         [System.IO.Directory]::CreateDirectory($script:ModelsDir) | Out-Null
     }
-    if ($IsWindows) {
+    if ($script:IsWindowsPlatform) {
         # 与 Linux xdg-open 降级一致：打开失败只提示手动打开，不中断
         try {
             Start-Process explorer.exe $script:ModelsDir -ErrorAction Stop
@@ -855,7 +856,7 @@ function Invoke-FirstRun {
         $ans = Read-Host '  是否现在帮你执行安装命令？[Y/n] › '
         if ($ans -eq '' -or $ans -eq 'y' -or $ans -eq 'Y') {
             Write-ColorOutput "  ⬇️ 正在安装 codex，请稍候…" DarkGray
-            if ($IsWindows) {
+            if ($script:IsWindowsPlatform) {
                 & powershell.exe -NoProfile -ExecutionPolicy ByPass -Command 'irm https://chatgpt.com/codex/install.ps1 | iex' | Out-Null
                 $installOk = ($LASTEXITCODE -eq 0)
                 $localBin = Join-Path $env:USERPROFILE '.local\bin'
@@ -865,11 +866,11 @@ function Invoke-FirstRun {
                 $localBin = Join-Path $env:HOME '.local/bin'
             }
             if ($installOk) {
-                if ($IsWindows) { $env:PATH = "${localBin};$env:PATH" } else { $env:PATH = "${localBin}:$env:PATH" }
+                if ($script:IsWindowsPlatform) { $env:PATH = "${localBin};$env:PATH" } else { $env:PATH = "${localBin}:$env:PATH" }
                 # 与 Linux 一致：除 PATH 命令外，还检查 ~/.local/bin 直连路径
                 $codexCmd = Get-Command codex -ErrorAction SilentlyContinue
                 if ($null -eq $codexCmd) {
-                    $candidate = Join-Path $localBin $(if ($IsWindows) { 'codex.exe' } else { 'codex' })
+                    $candidate = Join-Path $localBin $(if ($script:IsWindowsPlatform) { 'codex.exe' } else { 'codex' })
                     if ([System.IO.File]::Exists($candidate)) { $codexCmd = @{ Source = $candidate } }
                 }
                 if ($null -ne $codexCmd) {
@@ -895,7 +896,7 @@ function Invoke-FirstRun {
         $vm = [regex]::Match($out, '\d+\.\d+\.\d+')
         if ($vm.Success) { $curVer = $vm.Value }
         Write-ColorOutput "  ⚠️ codex v$curVer 低于 DeepSeek V4 要求的最低版本 $($script:DeepseekMinCodex)" Yellow
-        if ($IsWindows) {
+        if ($script:IsWindowsPlatform) {
             Write-ColorOutput '  升级命令：powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"' Green
         } else {
             Write-ColorOutput "  升级命令：curl -fsSL https://chatgpt.com/codex/install.sh | sh" Green
@@ -1110,7 +1111,8 @@ function Invoke-Menu {
             Invoke-Update
             $ans = Read-Host '  按回车重新加载菜单，q 退出 › '
             if ($ans -eq 'q' -or $ans -eq 'Q') { return }
-            & pwsh -NoProfile -File $entryScript menu
+            $hostCommand = if ($null -ne (Get-Command pwsh -ErrorAction SilentlyContinue)) { 'pwsh' } else { 'powershell.exe' }
+            & $hostCommand -NoProfile -File $entryScript menu
             return
         }
 
@@ -1199,7 +1201,7 @@ function Invoke-Update {
     $extract = Join-Path $tmpDir 'extract'
     try {
         Write-ColorOutput "  ⬇️ 正在下载更新" DarkGray
-        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zipPath -TimeoutSec 120
+        Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -OutFile $zipPath -TimeoutSec 120
         Expand-Archive -Path $zipPath -DestinationPath $extract -Force
 
         # 校验解压产物
@@ -1242,12 +1244,12 @@ function Invoke-Update {
 
 # === 体检 ===
 function Invoke-Doctor {
-    # 与 Linux cmd_doctor 对齐：固定检查项（PowerShell 7+ 对应"bash 原生实现"；
+    # 与 Linux cmd_doctor 对齐：固定检查项（PowerShell 5.1+ 对应"bash 原生实现"；
     # curl/unzip 是 Linux 平台依赖，Windows 用内置 cmdlet 无对应项）
     Write-ColorOutput "  🩺 codex-swap v$($script:ScriptVersion) 体检" Cyan
     $ok = 0; $bad = 0
     $checks = @(
-        @{ Name = "PowerShell 7+（当前 $($PSVersionTable.PSVersion)）"; Cond = ($PSVersionTable.PSVersion.Major -ge 7) },
+        @{ Name = "PowerShell 5.1+（当前 $($PSVersionTable.PSVersion)）"; Cond = ($PSVersionTable.PSVersion -ge [version]'5.1') },
         @{ Name = "数据目录: $($script:CodexHome)"; Cond = [System.IO.Directory]::Exists($script:CodexHome) },
         @{ Name = "config.toml 存在"; Cond = [System.IO.File]::Exists($script:ConfigPath) },
         @{ Name = "模板目录 models/"; Cond = [System.IO.Directory]::Exists($script:ModelsDir) },

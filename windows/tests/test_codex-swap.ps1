@@ -1,4 +1,4 @@
-#requires -Version 7.0
+#requires -Version 5.1
 # 单元测试 codex-swap v0.2.0 核心模块
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -239,6 +239,16 @@ Assert-True ($moduleText -match 'exit 1') 'psm1 致命错误非零退出码（�
 $entryPath = Join-Path $PSScriptRoot '../src/codex-swap.ps1'
 $entryText = [System.IO.File]::ReadAllText($entryPath, [System.Text.UTF8Encoding]::new($false))
 Assert-True ($entryText -notmatch 'ValidateSet') '入口脚本不拦截未知命令（走中文提示）'
+
+Write-Host "`n=== Test 16: PowerShell 5.1+ 兼容约束 ===" -ForegroundColor Cyan
+$manifestText = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src/codex-swap.psd1'), [System.Text.UTF8Encoding]::new($false))
+$cmdText = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '../bin/codex-swap.cmd'), [System.Text.UTF8Encoding]::new($false))
+$installText = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '../install.ps1'), [System.Text.UTF8Encoding]::new($false))
+Assert-True ($manifestText -match "PowerShellVersion\s*=\s*'5\.1'") '模块最低版本为 PowerShell 5.1'
+Assert-True ($moduleText -match 'IsWindowsPlatform' -and $moduleText -notmatch '\$IsWindows\b') 'Windows 判断不依赖 PowerShell 6+ 自动变量'
+Assert-True ($cmdText -match 'where pwsh' -and $cmdText -match 'powershell\.exe') '启动器优先 pwsh、回退 powershell.exe'
+Assert-True ($installText -match '需要 PowerShell 5\.1\+' -and $installText -match 'where pwsh') '安装器支持 5.1 并生成兼容启动器'
+Assert-True ($moduleText -match 'Invoke-WebRequest -UseBasicParsing' -and $installText -match 'Invoke-WebRequest -UseBasicParsing') '下载路径显式使用安全的基础解析'
 
 Write-Host "`n=== 总结 ===" -ForegroundColor Cyan
 Write-Host "通过: $pass" -ForegroundColor Green
