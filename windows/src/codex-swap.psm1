@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.51'
+$script:ScriptVersion = '0.2.52'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -1103,9 +1103,13 @@ function Invoke-Menu {
 
         # 字母 u：检查并升级（成功后重启进程加载新版本，与 Linux exec 重载一致）
         if ($choice -eq 'u' -or $choice -eq 'U') {
+            # 入口路径必须在 Invoke-Update 之前取值：Import-Module -Force 会卸载当前
+            # 模块实例，之后 $PSScriptRoot 等模块作用域引用与私有函数（Read-MenuReturn）全部失效
+            $entryScript = Join-Path $PSScriptRoot 'codex-swap.ps1'
             Invoke-Update
-            if (-not (Read-MenuReturn '  按回车重新加载菜单，q 退出 › ')) { return }
-            & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'codex-swap.ps1') menu
+            $ans = Read-Host '  按回车重新加载菜单，q 退出 › '
+            if ($ans -eq 'q' -or $ans -eq 'Q') { return }
+            & pwsh -NoProfile -File $entryScript menu
             return
         }
 
