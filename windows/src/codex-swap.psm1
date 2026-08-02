@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.65'
+$script:ScriptVersion = '0.2.66'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -826,8 +826,7 @@ function Invoke-BuiltinTemplate {
     $name = 'deepseek'
     Write-WizardDivider
     Write-ColorOutput "  🐳 DeepSeek 官方接入配置" Cyan
-    Write-ColorOutput "  默认 V4-Flash 模板；models.json 已含 V4-Flash/V4-Pro" DarkGray
-    Write-ColorOutput "  Codex 内 /model 或 --model 切换" DarkGray
+    Write-ColorOutput "  写入 models.json · 默认 V4-Flash · 原配置自动备份可随时切回" DarkGray
     Write-WizardDivider
     Write-ColorOutput "" White
     Write-ColorOutput "  🔑 DeepSeek API Key" Cyan
@@ -878,13 +877,16 @@ function Invoke-BuiltinTemplate {
 
 # === 向导：模型配置来源选择（首次向导与菜单“新建配置”共用） ===
 function Invoke-ChooseSource {
-    Write-ColorOutput "  📦 模型配置来源" Cyan
+    param([switch]$NoTitle)
+    if (-not $NoTitle) {
+        Write-ColorOutput "  📦 模型配置来源" Cyan
+    }
     Write-ColorOutput "  " White -NoNewline
     Write-ColorOutput "1)" Green -NoNewline
-    Write-ColorOutput " DeepSeek 官方接入配置 — 🐳" White
+    Write-ColorOutput " 🐳 DeepSeek 官方接入配置" White
     Write-ColorOutput "  " White -NoNewline
     Write-ColorOutput "2)" Green -NoNewline
-    Write-ColorOutput " 我有模板 — 打开目录手动导入" White
+    Write-ColorOutput " 📂 手动导入我自己的模板" White
     Write-ColorOutput "  q 取消" DarkGray
     while ($true) {
         $choice = Read-Host '  选择 [1-2] › '
@@ -903,10 +905,9 @@ function Invoke-ChooseSource {
 # === 新建模型配置（菜单 N：日常已有模板时也能新建 DeepSeek/导入模板） ===
 function Invoke-NewConfig {
     Write-ColorOutput "  🆕 新建模型配置" Cyan
-    Write-ColorOutput "  创建新的模型模板，已有配置与状态不受影响" DarkGray
     Write-ColorOutput "" White
     Write-WizardDivider
-    if (-not (Invoke-ChooseSource)) {
+    if (-not (Invoke-ChooseSource -NoTitle)) {
         Write-ColorOutput "  已取消" DarkGray
         return $false
     }

@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.65"
+VERSION="0.2.66"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -773,8 +773,7 @@ wizard_builtin_template() {
     local name="deepseek" key ans input
     wizard_divider
     printf "  ${CYAN}🐳 DeepSeek 官方接入配置${C}\n"
-    printf "  ${DGRAY}默认 V4-Flash 模板；models.json 已含 V4-Flash/V4-Pro${C}\n"
-    printf "  ${DGRAY}Codex 内 /model 或 --model 切换${C}\n"
+    printf "  ${DGRAY}写入 models.json · 默认 V4-Flash · 原配置自动备份可随时切回${C}\n"
 
     wizard_divider
     printf "  ${CYAN}🔑 DeepSeek API Key${C}\n"
@@ -830,9 +829,12 @@ wizard_builtin_template() {
 
 # === 向导：模型配置来源选择（首次向导与菜单“新建配置”共用） ===
 wizard_choose_source() {
-    printf "  ${BOLD_CYAN}📦 模型配置来源${C}\n"
-    printf "  ${GREEN}1)${C} DeepSeek 官方接入配置 — 🐳\n"
-    printf "  ${GREEN}2)${C} 我有模板 — 打开目录手动导入\n"
+    local with_title="${1:-1}"
+    if [ "$with_title" = 1 ]; then
+        printf "  ${BOLD_CYAN}📦 模型配置来源${C}\n"
+    fi
+    printf "  ${GREEN}1)${C} 🐳 DeepSeek 官方接入配置\n"
+    printf "  ${GREEN}2)${C} 📂 手动导入我自己的模板\n"
     printf "  ${DGRAY}q 取消${C}\n"
     local choice
     while true; do
@@ -867,9 +869,9 @@ cmd_first_run() {
 # === 新建模型配置（菜单 N：日常已有模板时也能新建 DeepSeek/导入模板） ===
 cmd_new_config() {
     printf "${BOLD_CYAN}  🆕 新建模型配置${C}\n"
-    printf "${DGRAY}  创建新的模型模板，已有配置与状态不受影响${C}\n\n"
+    printf "\n"
     wizard_divider
-    wizard_choose_source || { printf "${DGRAY}  已取消${C}\n"; return 1; }
+    wizard_choose_source 0 || { printf "${DGRAY}  已取消${C}\n"; return 1; }
     printf "  ${GREEN}✅ 新建配置完成${C}\n"
     return 0
 }
