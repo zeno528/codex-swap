@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.75"
+VERSION="0.2.76"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -1152,10 +1152,10 @@ cmd_menu() {
                 ;;
         esac
         if [[ "$choice" =~ ^[0-9]+$ ]]; then
-            local name
+            local selected
             if [ -f "${files[0]:-}" ] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#files[@]}" ]; then
-                name=$(basename "${files[$((choice-1))]}" .toml)
-                cmd_use "$name" || true
+                selected=$(basename "${files[$((choice-1))]}" .toml)
+                cmd_use "$selected" || true
                 wait_for_menu "  按回车返回菜单，q 退出 › " || return 0
             else
                 warn "  ❌ 无效: $choice"

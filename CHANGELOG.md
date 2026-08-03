@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.76] - 2026-08-03
+
+- fix(menu): 避免 cmd_menu 数字分支 local name 与 cmd_use 同名冲突
+
+
 ## [0.2.75] - 2026-08-03
 
 - ✨ feat(menu): 优化交互式菜单，支持输入 Go 直接启动 Codex
