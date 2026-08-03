@@ -16,15 +16,18 @@ printf '%s\n' 'model = "gpt-5.6-terra"' 'model_provider = "openai"' '[model_prov
 cp "$CODEX_HOME/models/deepseek.toml" "$CODEX_HOME/config.toml"
 cp "$CODEX_HOME/config.toml" "$test_root/deepseek-before.toml"
 
-output="$(bash linux/codex-swap list)"
-grep -q deepseek <<< "$output"
-grep -q '编号' <<< "$output"
-grep -q '🐳 deepseek' <<< "$output"
-grep -q '💠 openai' <<< "$output"
-output="$(bash linux/codex-swap current)"
-grep -q deepseek-v4-flash <<< "$output"
-output="$(bash linux/codex-swap doctor)"
-grep -q '通过 7 / 7' <<< "$output"
+output="$(bash linux/codex-swap list)" || { printf 'FAIL list exit=%d\n' "$?" >&4; exit 1; }
+printf '===A1 after list, len=%d===\n' "${#output}" >&4
+grep -q deepseek <<< "$output" || { printf 'FAIL grep deepseek\noutput:\n%s\n' "$output" >&4; exit 1; }
+grep -q '编号' <<< "$output" || { printf 'FAIL grep 编号\n' >&4; exit 1; }
+grep -q '🐳 deepseek' <<< "$output" || { printf 'FAIL grep deepseek emoji\n' >&4; exit 1; }
+grep -q '💠 openai' <<< "$output" || { printf 'FAIL grep openai emoji\n' >&4; exit 1; }
+output="$(bash linux/codex-swap current)" || { printf 'FAIL current exit=%d\n' "$?" >&4; exit 1; }
+printf '===A2 after current, len=%d===\n' "${#output}" >&4
+grep -q deepseek-v4-flash <<< "$output" || { printf 'FAIL grep current model\n' >&4; exit 1; }
+output="$(bash linux/codex-swap doctor)" || { printf 'FAIL doctor exit=%d\n' "$?" >&4; exit 1; }
+printf '===A3 after doctor, len=%d===\n' "${#output}" >&4
+grep -q '通过 7 / 7' <<< "$output" || { printf 'FAIL grep doctor\n' >&4; exit 1; }
 
 # provider 缺省按内置 OpenAI；单一 provider 模板允许模型名变化后仍识别激活
 fallback_home="$test_root/fallback/.codex"
