@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.75"
+VERSION="0.2.76"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -1076,7 +1076,8 @@ cmd_new_config() {
 
 wait_for_menu() {
     local choice prompt
-    prompt="${1/，q 退出/，${BOLD_CYAN}Go${C} 启动 Codex，q 退出}"
+    prompt=$1
+    prompt="${prompt/，q 退出/，${BOLD_CYAN}Go${C} 启动 Codex，q 退出}"
     printf '%b' "$prompt"
     read -r choice || return 1
     case "$choice" in

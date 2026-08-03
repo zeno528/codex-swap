@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # 在隔离 CODEX_HOME 中验证 Linux 分支的完整状态切换链路。
 set -euo pipefail
-trap 'printf "测试失败（第 %s 行）：%s\\n" "$LINENO" "$BASH_COMMAND" >&2' ERR
 
 test_root="$(mktemp -d)"
 trap 'rm -rf "$test_root"' EXIT
