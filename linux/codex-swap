@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.76"
+VERSION="0.2.77"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -510,7 +510,7 @@ cmd_use() {
         cp "$CONFIG" "$STATE_DIR/$src.toml"
         save_model_auth "$src"
     fi
-    [ "$src" = "$name" ] && { say "  当前已是 $name，无需切换"; return; }
+    [ "$src" = "$name" ] && { say "  当前已是 ${name}，无需切换"; return; }
 
     # 2. 目标内容：状态优先，无状态用模板播种
     local content="$tpl" mode="模板初始化"

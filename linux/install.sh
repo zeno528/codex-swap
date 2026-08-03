@@ -32,7 +32,7 @@ fi
 
 # ---------- 前置检查 ----------
 for tool in curl unzip; do
-    command -v "$tool" >/dev/null 2>&1 || fail "缺少 $tool，请先安装依赖"
+    command -v "$tool" >/dev/null 2>&1 || fail "缺少 ${tool}，请先安装依赖"
 done
 
 # ---------- 获取 Release ----------

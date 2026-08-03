@@ -73,5 +73,5 @@ write_changelog_entry() {
     { head -n 1 "$CL"; echo ""; printf '%s\n' "$entry"; echo ""; tail -n +2 "$CL"; } > "$tmp"
     mv "$tmp" "$CL"
     git add "$CL"
-    echo "已写入 CHANGELOG（v$ver）"
+    echo "已写入 CHANGELOG（v${ver}）"
 }

@@ -8,7 +8,7 @@ ROOT="$(git rev-parse --show-toplevel)"
 VF="$ROOT/VERSION"
 source "$ROOT/.githooks/lib.sh"
 
-[ -f "$VF" ] || { echo "pre-commit: 跳过版本递增（缺 $VF）"; exit 0; }
+[ -f "$VF" ] || { echo "pre-commit: 跳过版本递增（缺 ${VF}）"; exit 0; }
 
 # 发布物相关路径：改动这些才递增；其余（README/docs/CI/.githooks 等）跳过（见 lib.sh）
 
@@ -36,7 +36,7 @@ head_ver="$(git show HEAD:VERSION 2>/dev/null | tr -d '[:space:]' || true)"
 
 # 幂等：工作区 VERSION 已与 HEAD 不同（手动发版或上次已递增）则不重复递增
 if [ -n "$head_ver" ] && [ "$cur" != "$head_ver" ]; then
-    echo "pre-commit: VERSION 已由工作区改动（$head_ver → $cur），跳过递增"
+    echo "pre-commit: VERSION 已由工作区改动（${head_ver} → ${cur}），跳过递增"
     exit 0
 fi
 
@@ -56,11 +56,11 @@ if [ -f "$ROOT/windows/src/codex-swap.psd1" ]; then
     sed -i "s/^\([[:space:]]*ModuleVersion[[:space:]]*=[[:space:]]*'\)[^']*'/\1$new'/" "$ROOT/windows/src/codex-swap.psd1"
     git add "$ROOT/windows/src/codex-swap.psd1"
 fi
-echo "pre-commit: 版本号 $cur → $new（VERSION 与三处源码已同步）"
+echo "pre-commit: 版本号 ${cur} → ${new}（VERSION 与三处源码已同步）"
 # 提交消息可从命令行获取时（-m/-F/--amend）直接写 changelog 并随本次提交入库；
 # pre-commit 阶段 git add 有效（提交树尚未冻结）。编辑器交互提交由 prepare-commit-msg 兜底。
 msg="$(get_commit_msg || true)"
 if [ -n "$msg" ]; then
     write_changelog_entry "$msg"
-    echo "pre-commit: $msg 已记录到 CHANGELOG（v$new）"
+    echo "pre-commit: ${msg} 已记录到 CHANGELOG（v${new}）"
 fi
