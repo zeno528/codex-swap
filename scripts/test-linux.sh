@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # 在隔离 CODEX_HOME 中验证 Linux 分支的完整状态切换链路。
 set -euo pipefail
+exec 4>&2
+BASH_VERSION_STR="${BASH_VERSION:-unknown}"
+printf '===bash=%s===\n' "$BASH_VERSION_STR" >&4
 
 test_root="$(mktemp -d)"
 trap 'rm -rf "$test_root"' EXIT
@@ -187,6 +190,9 @@ output="$(printf 'Go\n' | CODEX_HOME="$CODEX_HOME" PATH="$fake_bin:$PATH" bash l
 grep -q 'Go.*启动 Codex' <<< "$output"
 grep -q 'CODEX_STARTED' <<< "$output"
 output="$(printf '1\nGo\n' | CODEX_HOME="$CODEX_HOME" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
+menu_b_exit=$?
+printf '===menu-B exit=%d===\n===output:\n%s\n===/output===\n' "$menu_b_exit" "$output" >&4
+[ "$menu_b_exit" -eq 0 ] || exit 1
 grep -q '按回车返回菜单.*Go.*启动 Codex' <<< "$output" || { echo 'FAIL-B1' >&2; exit 1; }
 grep -q 'CODEX_STARTED' <<< "$output" || { echo 'FAIL-B2' >&2; exit 1; }
 output="$(printf '1\nsk-wizard-test-key\n\n\n\nq\n' | CODEX_HOME="$wizard_home" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
