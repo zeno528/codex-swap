@@ -186,7 +186,10 @@ chmod +x "$fake_bin/codex"
 output="$(printf 'Go\n' | CODEX_HOME="$CODEX_HOME" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
 [[ "$output" == *Go* && "$output" == *"启动 Codex"* ]]
 grep -q 'CODEX_STARTED' <<< "$output"
-output="$(printf '1\nGo\n' | CODEX_HOME="$CODEX_HOME" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
+if ! output="$(printf '1\nGo\n' | CODEX_HOME="$CODEX_HOME" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"; then
+    printf '%s\n' "$output" >&2
+    exit 1
+fi
 [[ "$output" == *"按回车返回菜单"* && "$output" == *Go* && "$output" == *"启动 Codex"* ]]
 grep -q 'CODEX_STARTED' <<< "$output"
 output="$(printf '1\nsk-wizard-test-key\n\n\n\nq\n' | CODEX_HOME="$wizard_home" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
