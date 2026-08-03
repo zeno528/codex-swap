@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.74] - 2026-08-03
+
+- 🐛 fix(template): DeepSeek 模板关闭 supports_search_tool 修复 MCP 工具不可见
+
+
 ## [0.2.73] - 2026-08-02
 
 - ✨ feat(use): 优化切换输出并补充 provider 段字段提取

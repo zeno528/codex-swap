@@ -237,4 +237,10 @@ grep -q '新描述' "$edit_home/models/descriptions/gpt.desc"
 output="$(printf 'e\n1\n\n\nq\n' | CODEX_HOME="$edit_home" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
 test ! -f "$edit_home/models/descriptions/gpt.desc"
 
+# DeepSeek 官方模板必须内置 supports_search_tool=false，否则 MCP 工具静默不可见
+if grep -q '"supports_search_tool": true' linux/codex-swap windows/src/codex-swap.psm1; then
+    echo 'DeepSeek 模板 supports_search_tool 被改回 true' >&2
+    exit 1
+fi
+
 echo 'Linux 端到端切换测试通过'
