@@ -184,11 +184,13 @@ esac
 EOF
 chmod +x "$fake_bin/codex"
 output="$(printf 'Go\n' | CODEX_HOME="$CODEX_HOME" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
-grep -q 'Go.*启动 Codex' <<< "$output"
-grep -q 'CODEX_STARTED' <<< "$output"
+printf '===DEBUG-A-START===\n%s\n===DEBUG-A-END===\n' "$output" >&2
+grep -q 'Go.*启动 Codex' <<< "$output" || { echo 'FAIL-A1' >&2; exit 1; }
+grep -q 'CODEX_STARTED' <<< "$output" || { echo 'FAIL-A2' >&2; exit 1; }
 output="$(printf '1\nGo\n' | CODEX_HOME="$CODEX_HOME" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
-grep -q '按回车返回菜单.*Go.*启动 Codex' <<< "$output"
-grep -q 'CODEX_STARTED' <<< "$output"
+printf '===DEBUG-B-START===\n%s\n===DEBUG-B-END===\n' "$output" >&2
+grep -q '按回车返回菜单.*Go.*启动 Codex' <<< "$output" || { echo 'FAIL-B1' >&2; exit 1; }
+grep -q 'CODEX_STARTED' <<< "$output" || { echo 'FAIL-B2' >&2; exit 1; }
 output="$(printf '1\nsk-wizard-test-key\n\n\n\nq\n' | CODEX_HOME="$wizard_home" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
 grep -q '模板已创建' <<< "$output"
 grep -q '╌' <<< "$output"
