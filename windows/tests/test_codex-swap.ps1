@@ -164,6 +164,8 @@ Assert-True ((Get-CodexHome).EndsWith('.codex')) '返回以 .codex 结尾'
 Write-Host "`n=== Test 10: 更新以 VERSION 为准 ===" -ForegroundColor Cyan
 $moduleText = [System.IO.File]::ReadAllText($modulePath, [System.Text.UTF8Encoding]::new($false))
 Assert-True ($moduleText -match 'tag_name' -and $moduleText -notmatch 'Get-SourceVersion') '更新决策以 releases/latest tag 为准（raw VERSION 有 CDN 缓存延迟）'
+Assert-True ($moduleText.Contains("if (`$choice -eq 'go' -or `$choice -eq 'GO') { & codex; return }")) '菜单 Go 直接启动 Codex'
+Assert-True ($moduleText -match '(?s)function Read-MenuReturn.*?\$ans -match.*?& codex') '切换结果页 Go 直接启动 Codex'
 Assert-True ($moduleText -match '下载资产版本 v\$packageVersion 与 VERSION v\$sourceVersion 不一致') '下载资产必须校验 VERSION'
 Assert-True ($moduleText -notmatch "Copy-Item \(Join-Path \$extract '\*'\)") '替换用显式建目录+逐项复制（避免 powershell/powershell#27478）'
 Assert-True ($moduleText -notmatch 'Rename-Item \$root \$old') '更新不再重命名安装目录（运行中进程会锁定目录）'

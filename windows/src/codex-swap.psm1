@@ -3,7 +3,7 @@
 # 切换 Codex 模型配置：模板播种 + 状态恢复
 # 数据目录：%USERPROFILE%\.codex
 
-$script:ScriptVersion = '0.2.74'
+$script:ScriptVersion = '0.2.75'
 $script:RepoOwner      = 'zeno528'
 $script:RepoName       = 'codex-swap'
 $script:ReleaseAsset   = 'codex-swap-windows.zip'
@@ -1202,8 +1202,10 @@ function Invoke-FirstRun {
 
 # === 菜单辅助：回车返回 / q 退出（与 Linux wait_for_menu 一致）===
 function Read-MenuReturn {
-    param([string]$Prompt = '  按回车返回菜单，q 退出 › ')
-    $ans = Read-Host $Prompt
+    param([string]$Prompt = '  按回车返回菜单，Go 启动 Codex，q 退出 › ')
+    $esc = [char]27
+    $ans = Read-Host ($Prompt -replace 'Go', "$esc[1;38;2;63;174;194mGo$esc[0m")
+    if ($ans -match '^(?i:go)$') { & codex; return $false }
     return ($ans -ne 'q' -and $ans -ne 'Q')
 }
 
@@ -1362,7 +1364,7 @@ function Invoke-Menu {
             Write-Host "  $gray$(_HLine '╰' '┴' '╯')$reset"
         }
 
-        Write-ColorOutput "  操作：N 新建配置 · E 编辑描述 · U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出" DarkGray
+        Write-Host "  $esc[90m操作：N 新建配置 · E 编辑描述 · U 更新 · 📂 O 打开模板目录 · $esc[1;38;2;63;174;194mGo$esc[90m 启动 Codex · Enter 刷新 · q 退出$esc[0m"
         Write-ColorOutput "" White
         if ($files.Count -gt 0) {
             $choice = Read-Host "  选择模型 [1-$($files.Count)] › "
@@ -1371,6 +1373,7 @@ function Invoke-Menu {
         }
         if ($choice -eq 'q' -or $choice -eq 'Q') { return }
         if ([string]::IsNullOrWhiteSpace($choice)) { continue }
+        if ($choice -eq 'go' -or $choice -eq 'GO') { & codex; return }
 
         # 字母 n：新建模型配置（DeepSeek 官方配置 / 导入模板，日常有模板也可用）
         if ($choice -eq 'n' -or $choice -eq 'N') {

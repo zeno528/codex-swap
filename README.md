@@ -43,7 +43,7 @@ codex-swap uninstall
 ## 🚀 使用
 
 ```bash
-codex-swap            # 交互式菜单：选数字切换模型
+codex-swap            # 交互式菜单：输入 Go 直接启动；切换后也可输入 Go 启动 Codex
 codex-swap use gpt    # 切换模型（恢复该模型最新状态 / 首次模板播种）
 codex-swap list       # 列出模板及激活状态
 codex-swap current    # 查看当前生效配置

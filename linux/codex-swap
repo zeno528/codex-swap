@@ -8,7 +8,7 @@
 # ============================================================
 set -euo pipefail
 
-VERSION="0.2.74"
+VERSION="0.2.75"
 REPO_OWNER="zeno528"
 REPO_NAME="codex-swap"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
@@ -1075,9 +1075,14 @@ cmd_new_config() {
 }
 
 wait_for_menu() {
-    local choice
-    read -r -p "$1" choice || return 1
-    case "$choice" in q|Q) return 1 ;; esac
+    local choice prompt
+    prompt="${1/，q 退出/，${BOLD_CYAN}Go${C} 启动 Codex，q 退出}"
+    printf '%b' "$prompt"
+    read -r choice || return 1
+    case "$choice" in
+        q|Q) return 1 ;;
+        go|Go|gO|GO) exec codex ;;
+    esac
 }
 
 # === 交互式菜单 ===
@@ -1094,7 +1099,7 @@ cmd_menu() {
         cmd_list
         local files=("$MODELS_DIR"/*.toml) prompt
         if [ -f "${files[0]:-}" ]; then
-            printf "${DGRAY}  操作：N 新建配置 · E 编辑描述 · U 更新 · 📂 O 打开模板目录 · Enter 刷新 · q 退出${C}\n"
+            printf "${DGRAY}  操作：N 新建配置 · E 编辑描述 · U 更新 · 📂 O 打开模板目录 · ${BOLD_CYAN}Go${DGRAY} 启动 Codex · Enter 刷新 · q 退出${C}\n"
             echo ""
             prompt="  选择模型 [1-${#files[@]}] › "
         else
@@ -1104,6 +1109,7 @@ cmd_menu() {
         case "$choice" in
             q|Q) return ;;
             "" ) continue ;;
+            go|Go|gO|GO) exec codex ;;
             n|N)
                 cmd_new_config || true
                 wait_for_menu "  按回车返回菜单，q 退出 › " || return 0

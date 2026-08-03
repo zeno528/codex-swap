@@ -176,9 +176,19 @@ fi
 # 内置 🐳 DeepSeek 模板：假 codex + 管道输入走完整向导（默认创建 Flash 模板）
 cat > "$fake_bin/codex" <<'EOF'
 #!/usr/bin/env bash
-[ "$1" = "--version" ] && printf '0.144.0\n'
+case "${1:-}" in
+    --version) printf '0.144.0\n' ;;
+    '') printf 'CODEX_STARTED\n' ;;
+    *) exit 1 ;;
+esac
 EOF
 chmod +x "$fake_bin/codex"
+output="$(printf 'Go\n' | CODEX_HOME="$CODEX_HOME" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
+grep -q 'Go.*启动 Codex' <<< "$output"
+grep -q 'CODEX_STARTED' <<< "$output"
+output="$(printf '1\nGo\n' | CODEX_HOME="$CODEX_HOME" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
+grep -q '按回车返回菜单.*Go.*启动 Codex' <<< "$output"
+grep -q 'CODEX_STARTED' <<< "$output"
 output="$(printf '1\nsk-wizard-test-key\n\n\n\nq\n' | CODEX_HOME="$wizard_home" PATH="$fake_bin:$PATH" bash linux/codex-swap menu 2>&1)"
 grep -q '模板已创建' <<< "$output"
 grep -q '╌' <<< "$output"

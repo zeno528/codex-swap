@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.75] - 2026-08-03
+
+- ✨ feat(menu): 优化交互式菜单，支持输入 Go 直接启动 Codex
+
+
 ## [0.2.74] - 2026-08-03
 
 - 🐛 fix(template): DeepSeek 模板关闭 supports_search_tool 修复 MCP 工具不可见
